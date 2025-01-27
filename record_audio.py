@@ -122,8 +122,16 @@ def record_audio(filename=None, sample_rate=48000, input_device_id=None):
             input_data = input_stream.read(1024)[0]
             blackhole_data = blackhole_stream.read(1024)[0]
             
-            # 両方のデータを結合
-            combined_data = np.hstack((input_data, blackhole_data))
+            # 両方のデータをミックス
+            # 入力デバイスとBlackHoleのチャンネル数を合わせる
+            if input_data.shape[1] != blackhole_data.shape[1]:
+                # チャンネル数の少ない方に合わせる
+                min_channels = min(input_data.shape[1], blackhole_data.shape[1])
+                input_data = input_data[:, :min_channels]
+                blackhole_data = blackhole_data[:, :min_channels]
+            
+            # 音声をミックス（加算）して音量を調整
+            combined_data = (input_data + blackhole_data) / 2
             frames.append(combined_data)
             
             # 経過時間を表示
@@ -148,7 +156,12 @@ def record_audio(filename=None, sample_rate=48000, input_device_id=None):
                 # 録音データを numpy 配列に変換
                 recording = np.concatenate(frames)
 
-                # 録音データをファイルに保存
+                # チャンネル数を確認し、必要に応じてモノラルに変換
+                if recording.ndim > 1 and recording.shape[1] > 1:
+                    # ステレオの場合は両チャンネルの平均を取ってモノラルに変換
+                    recording = np.mean(recording, axis=1)
+
+                # 録音データをファイルに保存（モノラルとして保存）
                 sf.write(filepath, recording, sample_rate)
                 print(f"録音が完了しました。")
                 print(f"保存先: {filepath}")

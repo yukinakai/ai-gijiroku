@@ -1,9 +1,7 @@
 import unittest
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 import numpy as np
-import os
 from record_audio import record_audio, list_devices, find_blackhole_device
-from io import StringIO
 
 class TestRecordAudio(unittest.TestCase):
     def setUp(self):
@@ -56,22 +54,25 @@ class TestRecordAudio(unittest.TestCase):
     @patch('sounddevice.InputStream')
     @patch('builtins.input', return_value='')
     @patch('soundfile.write')
-    def test_record_audio_with_keyboard_interrupt(self, mock_sf_write, mock_input, mock_input_stream):
+    def test_record_audio_with_keyboard_interrupt(self, mock_input_stream):
         # ストリームのモック設定
         mock_input_device_stream = MagicMock()
         mock_blackhole_stream = MagicMock()
         
         # read メソッドが呼ばれたときのデータを設定
-        mock_data = np.zeros((1024, 2))
-        mock_input_device_stream.read.return_value = (mock_data, None)
-        mock_blackhole_stream.read.return_value = (mock_data, None)
+        # 入力デバイスとBlackHoleで異なるテストデータを用意
+        mock_input_data = np.ones((1024, 2)) * 0.5  # 入力デバイスのデータ（0.5の値）
+        mock_blackhole_data = np.ones((1024, 2)) * 0.3  # BlackHoleのデータ（0.3の値）
+        
+        mock_input_device_stream.read.return_value = (mock_input_data, None)
+        mock_blackhole_stream.read.return_value = (mock_blackhole_data, None)
         
         # InputStream が呼ばれたときに異なるモックを返すように設定
         mock_input_stream.side_effect = [mock_input_device_stream, mock_blackhole_stream]
 
         # 2回目のループで KeyboardInterrupt を発生させる
         mock_input_device_stream.read.side_effect = [
-            (mock_data, None),
+            (mock_input_data, None),
             KeyboardInterrupt
         ]
 

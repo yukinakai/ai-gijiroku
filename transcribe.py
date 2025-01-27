@@ -2,7 +2,6 @@ import os
 import argparse
 from pathlib import Path
 from openai import OpenAI
-from datetime import timedelta
 from dotenv import load_dotenv
 
 # .envファイルから環境変数を読み込む
