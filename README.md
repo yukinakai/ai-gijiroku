@@ -5,7 +5,7 @@
 ## 前提条件
 
 - macOS
-- Python 3.11.0b3（pyenvで管理）
+- Python
 - Blackhole 2ch（仮想オーディオドライバ）
 
 ## セットアップ
@@ -20,17 +20,11 @@ brew install blackhole-2ch
 2. Python環境のセットアップ
 
 ```bash
-# pyenvで仮想環境を作成
-pyenv virtualenv 3.11.0b3 ai-gijiroku # 3.11.0b3が最新
-
-# プロジェクトディレクトリに移動
-cd /path/to/ai-gijiroku
+# venvで仮想環境を作成
+python -m venv .venv
 
 # 仮想環境を有効化
-pyenv local ai-gijiroku
-
-# シェルを再起動して仮想環境を反映
-exec $SHELL -l
+source .venv/bin/activate
 
 # 必要なパッケージをインストール
 pip install -r requirements.txt
@@ -54,15 +48,8 @@ chmod +x record_audio.py
 ### 基本的な使用方法
 
 ```bash
-# 仮想環境が有効になっていることを確認（プロンプトに(ai-gijiroku)が表示されているか確認）
-# 表示されていない場合は以下のコマンドを実行
-pyenv activate ai-gijiroku
-
 # 録音を開始
 ./record_audio.py
-
-# エラーが出る場合は下記でも試す
-pathto-pyenv/.pyenv/versions/ai-gijiroku/bin/python record_audio.py
 ```
 
 ### 利用可能なオプション
