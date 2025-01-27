@@ -58,17 +58,16 @@ chmod +x record_audio.py
 # 表示されていない場合は以下のコマンドを実行
 pyenv activate ai-gijiroku
 
-# 30秒間録音
-./record_audio.py -d 30
+# 録音を開始
+./record_audio.py
 
 # エラーが出る場合は下記でも試す
-pathto-pyenv/.pyenv/versions/ai-gijiroku/bin/python record_audio.py -d 10
+pathto-pyenv/.pyenv/versions/ai-gijiroku/bin/python record_audio.py
 ```
 
 ### 利用可能なオプション
 
 - `-l, --list`: 利用可能なオーディオデバイスを表示
-- `-d, --duration`: 録音時間（秒）を指定
 - `-f, --filename`: 保存するファイル名を指定
 - `-r, --rate`: サンプリングレート（Hz）を指定
 
@@ -78,11 +77,11 @@ pathto-pyenv/.pyenv/versions/ai-gijiroku/bin/python record_audio.py -d 10
 # デバイス一覧を表示
 ./record_audio.py -l
 
-# 1分間録音して特定のファイル名で保存
-./record_audio.py -d 60 -f my_recording.wav
+# 特定のファイル名で録音
+./record_audio.py -f my_recording.wav
 
 # サンプリングレートを48kHzに設定して録音
-./record_audio.py -d 30 -r 48000
+./record_audio.py -r 48000
 ```
 
 ### 録音ファイルの保存場所
@@ -97,7 +96,8 @@ pathto-pyenv/.pyenv/versions/ai-gijiroku/bin/python record_audio.py -d 10
 ### 録音の停止
 
 - 録音中はCtrl+Cを押すことで録音を停止できます
-- 録音の進行状況はプログレスバーで表示されます
+- 録音中は経過時間が表示されます
+- 録音を停止すると、自動的にファイルが保存されます
 
 ## 注意事項
 
