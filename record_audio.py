@@ -23,29 +23,13 @@ def list_devices():
         print(f"  デフォルトサンプルレート: {device['default_samplerate']}")
     return devices
 
-def select_device(devices):
-    """
-    ユーザーにデバイスを選択させる
-    
-    Parameters:
-    - devices: デバイス一覧
-    
-    Returns:
-    - 選択されたデバイスのインデックス
-    """
-    while True:
-        try:
-            device_idx = int(input("\n録音するデバイスの番号を入力してください: "))
-            if 0 <= device_idx < len(devices):
-                device = devices[device_idx]
-                if device['max_output_channels'] == 0:
-                    print("エラー: 選択されたデバイスは出力に対応していません。")
-                    continue
-                return device_idx
-            else:
-                print("エラー: 無効なデバイス番号です。")
-        except ValueError:
-            print("エラー: 数値を入力してください。")
+def find_blackhole_device():
+    """BlackHoleデバイスのインデックスを検索"""
+    devices = sd.query_devices()
+    for i, device in enumerate(devices):
+        if 'BlackHole' in device['name']:
+            return i, device
+    return None, None
 
 def print_progress(elapsed_time):
     """録音の経過時間を表示"""
@@ -53,15 +37,22 @@ def print_progress(elapsed_time):
     sys.stdout.write(f"録音時間: {elapsed_time:.1f}秒 ")
     sys.stdout.flush()
 
-def record_audio(filename=None, sample_rate=48000, device_idx=None):
+def record_audio(filename=None, sample_rate=48000):
     """
-    オーディオを録音
+    BlackHoleを使用してオーディオを録音
     
     Parameters:
     - filename: 保存するファイル名（指定がない場合は日時から自動生成）
     - sample_rate: サンプリングレート（デフォルト48kHz）
-    - device_idx: 録音デバイスのインデックス
     """
+    # BlackHoleデバイスを検索
+    blackhole_idx, blackhole_device = find_blackhole_device()
+    if blackhole_idx is None:
+        print("\nエラー: BlackHoleデバイスが見つかりません。")
+        print("1. BlackHoleがインストールされているか確認してください。")
+        print("2. システム環境設定 > サウンド で BlackHole 2chが表示されているか確認してください。")
+        return
+
     # recordingsディレクトリが存在しない場合は作成
     os.makedirs(RECORDINGS_DIR, exist_ok=True)
     
@@ -71,13 +62,16 @@ def record_audio(filename=None, sample_rate=48000, device_idx=None):
     # ファイルパスを生成（recordingsディレクトリ内に保存）
     filepath = os.path.join(RECORDINGS_DIR, filename)
 
-    # デバイス情報を取得
-    devices = sd.query_devices()
-    device = devices[device_idx]
-    channels = device['max_output_channels']
+    print("\n録音の準備:")
+    print("1. システム環境設定 > サウンド > 出力 で録音したいデバイスを選択")
+    print("2. オーディオMIDI設定を開き、複数出力装置を作成")
+    print("3. 複数出力装置に、録音したいデバイスとBlackHole 2chの両方を追加")
+    print("4. システム環境設定 > サウンド > 出力 で作成した複数出力装置を選択")
+    print("\n上記の設定が完了したら、Enterキーを押して録音を開始してください。")
+    input()
 
     print(f"\n使用するデバイス:")
-    print(f"デバイス: {device['name']}")
+    print(f"録音デバイス: {blackhole_device['name']}")
     print(f"保存先: {filepath}")
 
     # 録音データを格納するリスト
@@ -88,8 +82,13 @@ def record_audio(filename=None, sample_rate=48000, device_idx=None):
         print("Ctrl+Cで録音を停止")
         print("経過時間:")
 
-        # ストリームを開く（出力デバイスを入力として使用）
-        stream = sd.InputStream(device=device_idx, channels=channels, samplerate=sample_rate, callback=None)
+        # ストリームを開く
+        stream = sd.InputStream(
+            device=blackhole_idx,
+            channels=blackhole_device['max_input_channels'],
+            samplerate=sample_rate,
+            callback=None
+        )
         stream.start()
 
         # 録音開始時間
@@ -137,12 +136,10 @@ def main():
     args = parser.parse_args()
     
     # デバイス一覧を表示
-    devices = list_devices()
+    list_devices()
     
-    # デバイスの選択
-    device_idx = select_device(devices)
-    
-    record_audio(args.filename, args.rate, device_idx)
+    # BlackHoleを使用して録音
+    record_audio(args.filename, args.rate)
 
 if __name__ == "__main__":
     main()
