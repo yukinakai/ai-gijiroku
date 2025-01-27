@@ -38,19 +38,17 @@ def find_macbook_mic():
             return i
     return None
 
-def print_progress(current_time, total_time):
-    """録音の進行状況を表示"""
-    progress = int((current_time / total_time) * 50)
+def print_progress(elapsed_time):
+    """録音の経過時間を表示"""
     sys.stdout.write('\r')
-    sys.stdout.write(f"[{'=' * progress}{' ' * (50-progress)}] {current_time:.1f}/{total_time:.1f}秒 ")
+    sys.stdout.write(f"録音時間: {elapsed_time:.1f}秒 ")
     sys.stdout.flush()
 
-def record_audio(duration, filename=None, sample_rate=48000):
+def record_audio(filename=None, sample_rate=48000):
     """
     マイクとシステムオーディオを同時に録音
     
     Parameters:
-    - duration: 録音時間（秒）
     - filename: 保存するファイル名（指定がない場合は日時から自動生成）
     - sample_rate: サンプリングレート（デフォルト48kHz）
     """
@@ -81,57 +79,80 @@ def record_audio(duration, filename=None, sample_rate=48000):
     print(f"システムオーディオ: {sd.query_devices(blackhole_idx)['name']}")
     print(f"保存先: {filepath}")
 
-    # 録音時間からサンプル数を計算
-    num_samples = int(duration * sample_rate)
+    # 録音データを格納するリスト
+    mic_frames = []
+    system_frames = []
     
     try:
-        print(f"\n録音を開始します... {duration}秒間")
+        print("\n録音を開始します...")
         print("Ctrl+Cで録音を停止")
-        print("進行状況:")
+        print("経過時間:")
 
-        # 両方のデバイスから同時に録音を開始
-        mic_recording = sd.rec(num_samples, samplerate=sample_rate, channels=1, device=mic_idx)
-        system_recording = sd.rec(num_samples, samplerate=sample_rate, channels=2, device=blackhole_idx)
-        
-        # 進行状況の表示
+        # ストリームを開く
+        mic_stream = sd.InputStream(device=mic_idx, channels=1, samplerate=sample_rate, callback=None)
+        system_stream = sd.InputStream(device=blackhole_idx, channels=2, samplerate=sample_rate, callback=None)
+
+        mic_stream.start()
+        system_stream.start()
+
+        # 録音開始時間
         start_time = time.time()
-        try:
-            while sd.get_stream().active:
-                current_time = time.time() - start_time
-                if current_time > duration:
-                    break
-                print_progress(current_time, duration)
-                time.sleep(0.1)
-        except KeyboardInterrupt:
-            print("\n録音を停止します...")
-            sd.stop()
-            return
-        
-        # 録音完了まで待機
-        sd.wait()
-        
-        print("\n録音処理中...")
-        
-        # マイク入力をステレオに変換
-        mic_stereo = np.column_stack((mic_recording, mic_recording))
-        
-        # 音量を調整して合成
-        combined_audio = (mic_stereo * 0.5 + system_recording * 0.5)
-        
-        # 録音データをファイルに保存
-        sf.write(filepath, combined_audio, sample_rate)
-        print(f"録音が完了しました。")
-        print(f"保存先: {filepath}")
-        
-    except Exception as e:
-        print(f"\nエラーが発生しました: {str(e)}")
+
+        while True:
+            # チャンクサイズ分のデータを読み取り
+            mic_data = mic_stream.read(1024)[0]
+            system_data = system_stream.read(1024)[0]
+            
+            # データを保存
+            mic_frames.append(mic_data)
+            system_frames.append(system_data)
+            
+            # 経過時間を表示
+            current_time = time.time() - start_time
+            print_progress(current_time)
+
+    except KeyboardInterrupt:
+        print("\n録音を停止します...")
+    finally:
+        # ストリームを停止・クローズ
+        if 'mic_stream' in locals():
+            mic_stream.stop()
+            mic_stream.close()
+        if 'system_stream' in locals():
+            system_stream.stop()
+            system_stream.close()
+
+        if mic_frames and system_frames:
+            print("\n録音処理中...")
+            
+            try:
+                # 録音データを numpy 配列に変換
+                mic_recording = np.concatenate(mic_frames)
+                system_recording = np.concatenate(system_frames)
+
+                # マイク入力をステレオに変換
+                mic_stereo = np.column_stack((mic_recording, mic_recording))
+
+                # 両方の録音データを同じ長さに調整
+                min_length = min(len(mic_stereo), len(system_recording))
+                mic_stereo = mic_stereo[:min_length]
+                system_recording = system_recording[:min_length]
+
+                # 音量を調整して合成
+                combined_audio = (mic_stereo * 0.5 + system_recording * 0.5)
+
+                # 録音データをファイルに保存
+                sf.write(filepath, combined_audio, sample_rate)
+                print(f"録音が完了しました。")
+                print(f"保存先: {filepath}")
+
+            except Exception as e:
+                print(f"\n録音データの処理中にエラーが発生しました: {str(e)}")
 
 def main():
     parser = argparse.ArgumentParser(description='オーディオ録音スクリプト')
     parser.add_argument('-l', '--list', action='store_true',
                       help='利用可能なオーディオデバイスを表示')
-    parser.add_argument('-d', '--duration', type=float, default=10.0,
-                      help='録音時間（秒）')
     parser.add_argument('-f', '--filename', type=str,
                       help='保存するファイル名')
     parser.add_argument('-r', '--rate', type=int, default=48000,
@@ -143,7 +164,7 @@ def main():
         list_devices()
         return
     
-    record_audio(args.duration, args.filename, args.rate)
+    record_audio(args.filename, args.rate)
 
 if __name__ == "__main__":
     main()
