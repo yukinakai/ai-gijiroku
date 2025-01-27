@@ -38,8 +38,8 @@ def select_device(devices):
             device_idx = int(input("\n録音するデバイスの番号を入力してください: "))
             if 0 <= device_idx < len(devices):
                 device = devices[device_idx]
-                if device['max_input_channels'] == 0:
-                    print("エラー: 選択されたデバイスは入力に対応していません。")
+                if device['max_output_channels'] == 0:
+                    print("エラー: 選択されたデバイスは出力に対応していません。")
                     continue
                 return device_idx
             else:
@@ -74,7 +74,7 @@ def record_audio(filename=None, sample_rate=48000, device_idx=None):
     # デバイス情報を取得
     devices = sd.query_devices()
     device = devices[device_idx]
-    channels = device['max_input_channels']
+    channels = device['max_output_channels']
 
     print(f"\n使用するデバイス:")
     print(f"デバイス: {device['name']}")
@@ -88,7 +88,7 @@ def record_audio(filename=None, sample_rate=48000, device_idx=None):
         print("Ctrl+Cで録音を停止")
         print("経過時間:")
 
-        # ストリームを開く
+        # ストリームを開く（出力デバイスを入力として使用）
         stream = sd.InputStream(device=device_idx, channels=channels, samplerate=sample_rate, callback=None)
         stream.start()
 

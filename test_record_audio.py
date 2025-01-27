@@ -16,13 +16,13 @@ class TestRecordAudio(unittest.TestCase):
             },
             {
                 'name': 'Device 2',
-                'max_input_channels': 0,
-                'max_output_channels': 2,
+                'max_input_channels': 2,
+                'max_output_channels': 0,  # 出力チャンネルなし
                 'default_samplerate': 48000
             },
             {
                 'name': 'Device 3',
-                'max_input_channels': 2,
+                'max_input_channels': 0,
                 'max_output_channels': 2,
                 'default_samplerate': 44100
             }
@@ -51,12 +51,12 @@ class TestRecordAudio(unittest.TestCase):
             selected = select_device(self.mock_devices)
             self.assertEqual(selected, 0)
 
-    def test_select_device_invalid_input_device(self):
+    def test_select_device_no_output_channels(self):
         with patch('builtins.input', side_effect=['1', '0']), \
              patch('builtins.print') as mock_print:
             selected = select_device(self.mock_devices)
             self.assertEqual(selected, 0)
-            mock_print.assert_any_call("エラー: 選択されたデバイスは入力に対応していません。")
+            mock_print.assert_any_call("エラー: 選択されたデバイスは出力に対応していません。")
 
     @patch('sounddevice.InputStream')
     def test_record_audio_with_keyboard_interrupt(self, mock_input_stream):
