@@ -1,3 +1,5 @@
+import { TranscriptionResult } from '../types';
+
 class RecordingUI {
   private startButton: HTMLButtonElement;
   private stopButton: HTMLButtonElement;
@@ -59,12 +61,12 @@ class RecordingUI {
     this.statusDiv.className = 'status ' + className;
   }
 
-  private displayTranscription(result: any): void {
+  private displayTranscription(result: TranscriptionResult): void {
     let transcriptText = result.text;
 
     if (result.segments && result.segments.length > 0) {
       transcriptText = result.segments
-        .map((segment: any) => {
+        .map((segment) => {
           const timeStamp = this.formatTime(segment.start);
           return `[${timeStamp}] ${segment.text}`;
         })
