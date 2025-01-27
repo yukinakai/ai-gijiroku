@@ -1,74 +1,127 @@
-# AI議事録作成ツール
+# AI議事録作成ツール - オーディオ録音機能
 
-Google MeetやZoomでのWeb会議の音声を自動で文字起こしするデスクトップアプリケーションです。OpenAI WhisperAPIを使用して高精度な文字起こしを実現します。
+このツールは、macOS上でマイク入力とシステムオーディオ（スピーカー出力）を同時に録音するための機能を提供します。
 
-## 必要要件
+## 前提条件
 
-- Node.js (v20.0.0以上)
-- OpenAI API Key
-- macOSまたはWindows
+- macOS
+- Python 3.11.0b3（pyenvで管理）
+- Blackhole 2ch（仮想オーディオドライバ）
 
-## インストール
+## セットアップ
 
-1. リポジトリをクローン:
+1. 必要なツールのインストール（まだの場合）
+
 ```bash
-git clone https://github.com/yourusername/ai-gijiroku.git
-cd ai-gijiroku
+# Homebrewを使用してBlackholeをインストール
+brew install blackhole-2ch
 ```
 
-2. 依存パッケージをインストール:
+2. Python環境のセットアップ
+
 ```bash
-npm install
+# pyenvで仮想環境を作成
+pyenv virtualenv 3.11.0b3 ai-gijiroku # 3.11.0b3が最新
+
+# プロジェクトディレクトリに移動
+cd /path/to/ai-gijiroku
+
+# 仮想環境を有効化
+pyenv local ai-gijiroku
+
+# シェルを再起動して仮想環境を反映
+exec $SHELL -l
+
+# 必要なパッケージをインストール
+pip install -r requirements.txt
 ```
 
-3. 環境変数の設定:
+3. スクリプトの実行権限を設定
+
 ```bash
-cp .env.example .env
-```
-`.env`ファイルを編集し、OpenAI APIキーを設定してください:
-```
-OPENAI_API_KEY=your_api_key_here
+chmod +x record_audio.py
 ```
 
-## 開発
+## システム設定
 
-開発モードで実行:
+1. システム環境設定を開く
+2. サウンド設定に移動
+3. 出力タブで「BlackHole 2ch」を選択
+   - これにより、システムの音声出力がBlackholeにルーティングされます
+
+## 使用方法
+
+### 基本的な使用方法
+
 ```bash
-npm run dev
+# 仮想環境が有効になっていることを確認（プロンプトに(ai-gijiroku)が表示されているか確認）
+# 表示されていない場合は以下のコマンドを実行
+pyenv activate ai-gijiroku
+
+# 30秒間録音
+./record_audio.py -d 30
+
+# エラーが出る場合は下記でも試す
+pathto-pyenv/.pyenv/versions/ai-gijiroku/bin/python record_audio.py -d 10
 ```
 
-## ビルド
+### 利用可能なオプション
 
-アプリケーションをビルド:
+- `-l, --list`: 利用可能なオーディオデバイスを表示
+- `-d, --duration`: 録音時間（秒）を指定
+- `-f, --filename`: 保存するファイル名を指定
+- `-r, --rate`: サンプリングレート（Hz）を指定
+
+### 使用例
+
 ```bash
-npm run build
+# デバイス一覧を表示
+./record_audio.py -l
+
+# 1分間録音して特定のファイル名で保存
+./record_audio.py -d 60 -f my_recording.wav
+
+# サンプリングレートを48kHzに設定して録音
+./record_audio.py -d 30 -r 48000
 ```
 
-実行可能ファイルを作成:
-```bash
-npm run dist
-```
+### 録音ファイルの保存場所
 
-## テスト
+録音したファイルは、プロジェクトディレクトリ内の`recordings`フォルダに保存されます：
 
-テストの実行:
-```bash
-npm test
-```
+- ファイル名を指定しない場合：`recordings/recording_YYYYMMDD_HHMMSS.wav`
+- ファイル名を指定した場合：`recordings/指定したファイル名`
 
-## 機能
+録音開始時に保存先のパスが表示され、録音完了時にも確認メッセージが表示されます。
 
-- Web会議の音声をリアルタイムでキャプチャ
-- OpenAI Whisper APIを使用した高精度な文字起こし
-- タイムスタンプ付きの文字起こし結果
-- 開発モードでのDevTools対応
+### 録音の停止
 
-## ライセンス
-
-ISC
+- 録音中はCtrl+Cを押すことで録音を停止できます
+- 録音の進行状況はプログレスバーで表示されます
 
 ## 注意事項
 
-- 音声のキャプチャには、システムの音声出力デバイスへのアクセス権限が必要です。
-- OpenAI APIの使用には、有効なAPIキーと十分なクレジットが必要です。
-- 文字起こしの精度は、音声の品質や環境ノイズに依存します。
+- 録音開始前に、システムの音声出力が「BlackHole 2ch」に設定されていることを確認してください
+- 録音終了後は、必要に応じてシステムの音声出力を元の設定に戻してください
+- 録音ファイルは自動的にWAV形式で保存されます
+- スクリプトを実行する前に、必ず仮想環境が有効になっていることを確認してください
+
+## トラブルシューティング
+
+1. `ModuleNotFoundError: No module named 'sounddevice'`などのエラーが表示される場合
+   - 仮想環境が有効になっているか確認（プロンプトに`(ai-gijiroku)`が表示されているか）
+   - 仮想環境を有効化: `pyenv activate ai-gijiroku`
+   - パッケージを再インストール: `pip install -r requirements.txt`
+
+2. BlackHoleデバイスが見つからない場合
+   - システム環境設定でBlackholeが正しくインストールされているか確認
+   - 必要に応じてBlackholeを再インストール
+
+3. 音声が録音されない場合
+   - システムの音声出力が「BlackHole 2ch」に設定されているか確認
+   - マイクの権限が正しく設定されているか確認
+
+4. その他のエラーが発生する場合
+   - 仮想環境が有効になっているか確認
+   - 必要なパッケージが正しくインストールされているか確認
+   - シェルを再起動して仮想環境を再読み込み: `exec $SHELL -l`
