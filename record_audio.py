@@ -164,6 +164,8 @@ def main():
                        help='保存するファイル名')
     parser.add_argument('-r', '--rate', type=int, default=48000,
                        help='サンプリングレート（Hz）')
+    parser.add_argument('--no-transcribe', action='store_true',
+                       help='文字起こしをスキップする')
     
     args = parser.parse_args()
     
@@ -183,7 +185,7 @@ def main():
     # 選択された入力デバイスとBlackHoleを使用して録音
     audio_file = record_audio(args.filename, args.rate, device_id)
     
-    if audio_file:
+    if audio_file and not args.no_transcribe:
         print("\n文字起こしを開始します...")
         try:
             output_file = process_single_file(audio_file)
