@@ -5,42 +5,39 @@ import os
 from record_audio import record_audio, find_blackhole_device, find_macbook_mic
 
 class TestRecordAudio(unittest.TestCase):
-    @patch('sounddevice.rec')
-    @patch('sounddevice.wait')
-    @patch('sounddevice.stop')
-    @patch('sounddevice.get_stream')
-    @patch('soundfile.write')
-    def test_record_audio_with_keyboard_interrupt(self, mock_sf_write, mock_get_stream, 
-                                                mock_stop, mock_wait, mock_rec):
-        # モックの設定
-        mock_stream = MagicMock()
-        mock_get_stream.return_value = mock_stream
-        mock_stream.active = True
+    @patch('sounddevice.InputStream')
+    def test_record_audio_with_keyboard_interrupt(self, mock_input_stream):
+        # ストリームのモック設定
+        mock_mic_stream = MagicMock()
+        mock_system_stream = MagicMock()
+        
+        # read メソッドが呼ばれたときのデータを設定
+        mock_mic_data = np.zeros((1024, 1))
+        mock_system_data = np.zeros((1024, 2))
+        mock_mic_stream.read.return_value = (mock_mic_data, None)
+        mock_system_stream.read.return_value = (mock_system_data, None)
+        
+        # InputStream が呼ばれたときに異なるモックを返すように設定
+        mock_input_stream.side_effect = [mock_mic_stream, mock_system_stream]
 
-        # 録音データのモック
-        mock_rec.side_effect = [
-            np.zeros((1000, 1)),  # マイク録音
-            np.zeros((1000, 2))   # システム音声
+        # 2回目のループで KeyboardInterrupt を発生させる
+        mock_mic_stream.read.side_effect = [
+            (mock_mic_data, None),
+            KeyboardInterrupt
         ]
-
-        # KeyboardInterruptをシミュレート
-        def side_effect(*args, **kwargs):
-            raise KeyboardInterrupt
-        mock_stream.active = side_effect
 
         # テスト実行
         with patch('record_audio.find_blackhole_device', return_value=1), \
              patch('record_audio.find_macbook_mic', return_value=0):
             record_audio()
 
-        # 録音が開始されたことを確認
-        self.assertEqual(mock_rec.call_count, 2)
-        
-        # 録音が停止されたことを確認
-        mock_stop.assert_called_once()
-        
-        # ファイルが保存されたことを確認
-        mock_sf_write.assert_called_once()
+        # ストリームが正しく開始・停止されたことを確認
+        mock_mic_stream.start.assert_called_once()
+        mock_system_stream.start.assert_called_once()
+        mock_mic_stream.stop.assert_called_once()
+        mock_system_stream.stop.assert_called_once()
+        mock_mic_stream.close.assert_called_once()
+        mock_system_stream.close.assert_called_once()
 
     def test_find_blackhole_device(self):
         with patch('sounddevice.query_devices', return_value=[
