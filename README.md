@@ -46,14 +46,32 @@ python record_audio.py
 
 ### 2. 文字起こし
 
+以下のいずれかの方法で文字起こしを実行できます：
+
+1. 単一の音声ファイルを文字起こし
+```bash
+python transcribe.py -f path/to/audio.wav
+```
+
+2. ディレクトリ内のすべての音声ファイルを文字起こし
+```bash
+python transcribe.py -d path/to/directory
+```
+
+3. デフォルトの`recordings`ディレクトリ内のファイルを文字起こし
 ```bash
 python transcribe.py
 ```
 
-- `recordings`ディレクトリ内の音声ファイルを自動で検出
+オプション:
+- `-f, --file`: 文字起こしする音声ファイルのパス
+- `-d, --directory`: 文字起こしする音声ファイルのディレクトリ
+- `-o, --output`: 出力先ディレクトリ（デフォルト: transcripts）
+
+仕様:
 - 対応フォーマット: .wav, .mp3, .m4a
 - OpenAI Whisper APIを使用して高精度な文字起こし
-- 書き起こされたテキストは`transcripts`ディレクトリに保存
+- 書き起こされたテキストは指定された出力ディレクトリに保存
 - フォーマット: `[HH:MM:SS] 発言内容`
 
 ## 開発
