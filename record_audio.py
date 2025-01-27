@@ -8,6 +8,9 @@ import os
 import time
 import sys
 
+# 録音ファイルの保存ディレクトリ
+RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'recordings')
+
 def list_devices():
     """利用可能なオーディオデバイスを一覧表示"""
     devices = sd.query_devices()
@@ -51,8 +54,14 @@ def record_audio(duration, filename=None, sample_rate=48000):
     - filename: 保存するファイル名（指定がない場合は日時から自動生成）
     - sample_rate: サンプリングレート（デフォルト48kHz）
     """
+    # recordingsディレクトリが存在しない場合は作成
+    os.makedirs(RECORDINGS_DIR, exist_ok=True)
+    
     if filename is None:
         filename = f"recording_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+    
+    # ファイルパスを生成（recordingsディレクトリ内に保存）
+    filepath = os.path.join(RECORDINGS_DIR, filename)
     
     # BlackHoleデバイスを検索
     blackhole_idx = find_blackhole_device()
@@ -70,6 +79,7 @@ def record_audio(duration, filename=None, sample_rate=48000):
     print(f"使用するデバイス:")
     print(f"マイク: {sd.query_devices(mic_idx)['name']}")
     print(f"システムオーディオ: {sd.query_devices(blackhole_idx)['name']}")
+    print(f"保存先: {filepath}")
 
     # 録音時間からサンプル数を計算
     num_samples = int(duration * sample_rate)
@@ -109,8 +119,9 @@ def record_audio(duration, filename=None, sample_rate=48000):
         combined_audio = (mic_stereo * 0.5 + system_recording * 0.5)
         
         # 録音データをファイルに保存
-        sf.write(filename, combined_audio, sample_rate)
-        print(f"録音が完了しました。ファイル名: {filename}")
+        sf.write(filepath, combined_audio, sample_rate)
+        print(f"録音が完了しました。")
+        print(f"保存先: {filepath}")
         
     except Exception as e:
         print(f"\nエラーが発生しました: {str(e)}")
