@@ -4,14 +4,20 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { RecordingOptions } from '../types';
 
+interface AudioSourceOptions {
+  options: string[];
+}
+
 export class RecordingService extends EventEmitter {
   private recorder: AudioRecorder | null = null;
   private outputPath: string;
   private isRecording: boolean = false;
+  private recordingOptions: RecordingOptions;
 
   constructor(options: RecordingOptions = {}) {
     super();
     this.outputPath = path.join(process.cwd(), 'recordings');
+    this.recordingOptions = options;
     
     // 録音ディレクトリの作成
     if (!fs.existsSync(this.outputPath)) {
@@ -32,10 +38,10 @@ export class RecordingService extends EventEmitter {
       silence: 0,
       device: null,
       bits: 16,
-      channels: 1,
+      channels: this.recordingOptions.channels ?? 1,
       encoding: 'signed-integer',
-      rate: 16000,
-      type: 'wav',
+      rate: this.recordingOptions.sampleRate ?? 16000,
+      type: this.recordingOptions.format ?? 'wav',
       ...this.getSystemAudioSource()
     };
 
@@ -87,7 +93,7 @@ export class RecordingService extends EventEmitter {
     return path.join(this.outputPath, lastFile);
   }
 
-  private getSystemAudioSource() {
+  private getSystemAudioSource(): AudioSourceOptions {
     // プラットフォームに応じて適切な音声ソースを設定
     switch (process.platform) {
       case 'darwin':

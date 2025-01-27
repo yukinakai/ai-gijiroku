@@ -4,13 +4,13 @@ process.env.OPENAI_API_KEY = 'test-api-key';
 // AudioRecorderのモック
 jest.mock('node-audiorecorder', () => {
   return class MockAudioRecorder {
-    private eventHandlers: { [key: string]: Function[] } = {};
+    private eventHandlers: { [key: string]: Array<(...args: unknown[]) => void> } = {};
 
     constructor() {
       this.eventHandlers = {};
     }
 
-    start() {
+    start(): { stream: () => { pipe: jest.Mock } } {
       return {
         stream: () => ({
           pipe: jest.fn()
@@ -18,18 +18,18 @@ jest.mock('node-audiorecorder', () => {
       };
     }
 
-    stop() {
+    stop(): void {
       return;
     }
 
-    on(event: string, handler: Function) {
+    on(event: string, handler: (...args: unknown[]) => void): void {
       if (!this.eventHandlers[event]) {
         this.eventHandlers[event] = [];
       }
       this.eventHandlers[event].push(handler);
     }
 
-    emit(event: string, ...args: any[]) {
+    emit(event: string, ...args: unknown[]): void {
       if (this.eventHandlers[event]) {
         this.eventHandlers[event].forEach(handler => handler(...args));
       }
