@@ -74,7 +74,7 @@ class TestRecordAudio(unittest.TestCase):
 
         # 2回目のループで KeyboardInterrupt を発生させる
         mock_input_device_stream.read.side_effect = [
-            (mock_data, None),
+            (mock_input_data, None),
             KeyboardInterrupt
         ]
 
