@@ -55,7 +55,8 @@ class TestRecordAudio(unittest.TestCase):
 
     @patch('sounddevice.InputStream')
     @patch('builtins.input', return_value='')
-    def test_record_audio_with_keyboard_interrupt(self, mock_input, mock_input_stream):
+    @patch('soundfile.write')
+    def test_record_audio_with_keyboard_interrupt(self, mock_sf_write, mock_input, mock_input_stream):
         # ストリームのモック設定
         mock_input_device_stream = MagicMock()
         mock_blackhole_stream = MagicMock()
@@ -76,7 +77,10 @@ class TestRecordAudio(unittest.TestCase):
 
         # テスト実行
         with patch('sounddevice.query_devices', return_value=self.mock_devices):
-            record_audio(input_device_id=0)
+            result = record_audio(input_device_id=0)
+            
+        # ファイルパスが返されることを確認
+        self.assertIsNotNone(result)
 
         # 両方のストリームが正しく開始・停止されたことを確認
         mock_input_device_stream.start.assert_called_once()
@@ -117,6 +121,7 @@ class TestRecordAudio(unittest.TestCase):
     def test_main_function(self):
         with patch('record_audio.list_devices') as mock_list_devices, \
              patch('record_audio.record_audio') as mock_record_audio, \
+             patch('record_audio.process_single_file') as mock_process_single_file, \
              patch('argparse.ArgumentParser.parse_args') as mock_args, \
              patch('builtins.input', return_value='0') as mock_input:
             
@@ -126,12 +131,21 @@ class TestRecordAudio(unittest.TestCase):
             )
             mock_list_devices.return_value = self.mock_devices
             
+            # record_audioが音声ファイルのパスを返すように設定
+            mock_audio_path = "recordings/test_audio.wav"
+            mock_record_audio.return_value = mock_audio_path
+            
+            # process_single_fileが文字起こしファイルのパスを返すように設定
+            mock_transcript_path = "transcripts/test_audio.txt"
+            mock_process_single_file.return_value = mock_transcript_path
+            
             from record_audio import main
             main()
             
-            # list_devicesとrecord_audioが呼び出されたことを確認
+            # 各関数が正しく呼び出されたことを確認
             mock_list_devices.assert_called_once()
             mock_record_audio.assert_called_once_with(None, 48000, 0)
+            mock_process_single_file.assert_called_once_with(mock_audio_path)
             mock_input.assert_called_once()
 
 if __name__ == '__main__':

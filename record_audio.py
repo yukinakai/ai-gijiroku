@@ -7,6 +7,7 @@ from datetime import datetime
 import os
 import time
 import sys
+from transcribe import process_single_file
 
 # 録音ファイルの保存ディレクトリ
 RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'recordings')
@@ -151,9 +152,11 @@ def record_audio(filename=None, sample_rate=48000, input_device_id=None):
                 sf.write(filepath, recording, sample_rate)
                 print(f"録音が完了しました。")
                 print(f"保存先: {filepath}")
+                return filepath
 
             except Exception as e:
                 print(f"\n録音データの処理中にエラーが発生しました: {str(e)}")
+                return None
 
 def main():
     parser = argparse.ArgumentParser(description='オーディオ録音スクリプト')
@@ -178,7 +181,16 @@ def main():
             print("数値を入力してください。")
     
     # 選択された入力デバイスとBlackHoleを使用して録音
-    record_audio(args.filename, args.rate, device_id)
+    audio_file = record_audio(args.filename, args.rate, device_id)
+    
+    if audio_file:
+        print("\n文字起こしを開始します...")
+        try:
+            output_file = process_single_file(audio_file)
+            print(f"文字起こしが完了しました。")
+            print(f"出力ファイル: {output_file}")
+        except Exception as e:
+            print(f"文字起こし中にエラーが発生しました: {str(e)}")
 
 if __name__ == "__main__":
     main()
