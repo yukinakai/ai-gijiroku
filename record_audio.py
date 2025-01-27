@@ -37,20 +37,32 @@ def print_progress(elapsed_time):
     sys.stdout.write(f"録音時間: {elapsed_time:.1f}秒 ")
     sys.stdout.flush()
 
-def record_audio(filename=None, sample_rate=48000):
+def record_audio(filename=None, sample_rate=48000, input_device_id=None):
     """
-    BlackHoleを使用してオーディオを録音
+    指定された入力デバイスとBlackHoleを使用してオーディオを録音
     
     Parameters:
     - filename: 保存するファイル名（指定がない場合は日時から自動生成）
     - sample_rate: サンプリングレート（デフォルト48kHz）
+    - input_device_id: 入力デバイスのID
     """
+    # 入力デバイスの確認
+    devices = sd.query_devices()
+    if input_device_id is None or input_device_id >= len(devices):
+        print("\nエラー: 有効な入力デバイスIDを指定してください。")
+        return
+
     # BlackHoleデバイスを検索
     blackhole_idx, blackhole_device = find_blackhole_device()
     if blackhole_idx is None:
         print("\nエラー: BlackHoleデバイスが見つかりません。")
         print("1. BlackHoleがインストールされているか確認してください。")
         print("2. システム環境設定 > サウンド で BlackHole 2chが表示されているか確認してください。")
+        return
+
+    input_device = devices[input_device_id]
+    if input_device['max_input_channels'] == 0:
+        print(f"\nエラー: デバイス {input_device_id} は入力デバイスではありません。")
         return
 
     # recordingsディレクトリが存在しない場合は作成
@@ -82,22 +94,36 @@ def record_audio(filename=None, sample_rate=48000):
         print("Ctrl+Cで録音を停止")
         print("経過時間:")
 
-        # ストリームを開く
-        stream = sd.InputStream(
+        # 入力デバイスのストリームを開く
+        input_stream = sd.InputStream(
+            device=input_device_id,
+            channels=input_device['max_input_channels'],
+            samplerate=sample_rate,
+            callback=None
+        )
+        
+        # BlackHoleのストリームを開く
+        blackhole_stream = sd.InputStream(
             device=blackhole_idx,
             channels=blackhole_device['max_input_channels'],
             samplerate=sample_rate,
             callback=None
         )
-        stream.start()
+
+        input_stream.start()
+        blackhole_stream.start()
 
         # 録音開始時間
         start_time = time.time()
 
         while True:
-            # チャンクサイズ分のデータを読み取り
-            data = stream.read(1024)[0]
-            frames.append(data)
+            # 両方のデバイスからデータを読み取り
+            input_data = input_stream.read(1024)[0]
+            blackhole_data = blackhole_stream.read(1024)[0]
+            
+            # 両方のデータを結合
+            combined_data = np.hstack((input_data, blackhole_data))
+            frames.append(combined_data)
             
             # 経過時間を表示
             current_time = time.time() - start_time
@@ -107,9 +133,12 @@ def record_audio(filename=None, sample_rate=48000):
         print("\n録音を停止します...")
     finally:
         # ストリームを停止・クローズ
-        if 'stream' in locals():
-            stream.stop()
-            stream.close()
+        if 'input_stream' in locals():
+            input_stream.stop()
+            input_stream.close()
+        if 'blackhole_stream' in locals():
+            blackhole_stream.stop()
+            blackhole_stream.close()
 
         if frames:
             print("\n録音処理中...")
@@ -129,17 +158,19 @@ def record_audio(filename=None, sample_rate=48000):
 def main():
     parser = argparse.ArgumentParser(description='オーディオ録音スクリプト')
     parser.add_argument('-f', '--filename', type=str,
-                      help='保存するファイル名')
+                       help='保存するファイル名')
     parser.add_argument('-r', '--rate', type=int, default=48000,
-                      help='サンプリングレート（Hz）')
+                       help='サンプリングレート（Hz）')
+    parser.add_argument('-i', '--input-device', type=int, required=True,
+                       help='入力デバイスのID（デバイス一覧から選択）')
     
     args = parser.parse_args()
     
     # デバイス一覧を表示
     list_devices()
     
-    # BlackHoleを使用して録音
-    record_audio(args.filename, args.rate)
+    # 指定された入力デバイスとBlackHoleを使用して録音
+    record_audio(args.filename, args.rate, args.input_device)
 
 if __name__ == "__main__":
     main()
