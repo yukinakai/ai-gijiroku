@@ -117,12 +117,12 @@ class TestRecordAudio(unittest.TestCase):
     def test_main_function(self):
         with patch('record_audio.list_devices') as mock_list_devices, \
              patch('record_audio.record_audio') as mock_record_audio, \
-             patch('argparse.ArgumentParser.parse_args') as mock_args:
+             patch('argparse.ArgumentParser.parse_args') as mock_args, \
+             patch('builtins.input', return_value='0') as mock_input:
             
             mock_args.return_value = MagicMock(
                 filename=None,
-                rate=48000,
-                input_device=0
+                rate=48000
             )
             mock_list_devices.return_value = self.mock_devices
             
@@ -132,6 +132,7 @@ class TestRecordAudio(unittest.TestCase):
             # list_devicesとrecord_audioが呼び出されたことを確認
             mock_list_devices.assert_called_once()
             mock_record_audio.assert_called_once_with(None, 48000, 0)
+            mock_input.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()

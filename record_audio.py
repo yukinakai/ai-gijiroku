@@ -161,16 +161,24 @@ def main():
                        help='保存するファイル名')
     parser.add_argument('-r', '--rate', type=int, default=48000,
                        help='サンプリングレート（Hz）')
-    parser.add_argument('-i', '--input-device', type=int, required=True,
-                       help='入力デバイスのID（デバイス一覧から選択）')
     
     args = parser.parse_args()
     
     # デバイス一覧を表示
-    list_devices()
+    devices = list_devices()
     
-    # 指定された入力デバイスとBlackHoleを使用して録音
-    record_audio(args.filename, args.rate, args.input_device)
+    # ユーザーに入力デバイスの選択を求める
+    while True:
+        try:
+            device_id = int(input("\n使用する入力デバイスのIDを入力してください: "))
+            if 0 <= device_id < len(devices):
+                break
+            print("無効なデバイスIDです。もう一度入力してください。")
+        except ValueError:
+            print("数値を入力してください。")
+    
+    # 選択された入力デバイスとBlackHoleを使用して録音
+    record_audio(args.filename, args.rate, device_id)
 
 if __name__ == "__main__":
     main()
