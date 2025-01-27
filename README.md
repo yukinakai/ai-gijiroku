@@ -1,114 +1,63 @@
-# AI議事録作成ツール - オーディオ録音機能
+# AI議事録
 
-このツールは、macOS上でマイク入力とシステムオーディオ（スピーカー出力）を同時に録音するための機能を提供します。
-
-## 前提条件
-
-- macOS
-- Python
-- Blackhole 2ch（仮想オーディオドライバ）
+音声を録音し、自動で文字起こしするツール
 
 ## セットアップ
 
-1. 必要なツールのインストール（まだの場合）
-
+1. 必要なパッケージをインストール
 ```bash
-# Homebrewを使用してBlackholeをインストール
-brew install blackhole-2ch
-```
-
-2. Python環境のセットアップ
-
-```bash
-# venvで仮想環境を作成
-python -m venv .venv
-
-# 仮想環境を有効化
-source .venv/bin/activate
-
-# 必要なパッケージをインストール
 pip install -r requirements.txt
 ```
 
-3. スクリプトの実行権限を設定
+2. BlackHoleのインストール
+- [BlackHole](https://existential.audio/blackhole/)をインストール
+- システム環境設定 > サウンドでBlackHole 2chが表示されることを確認
 
-```bash
-chmod +x record_audio.py
+3. 環境変数の設定
+`.env.example`をコピーして`.env`を作成し、OpenAI APIキーを設定します：
 ```
-
-## システム設定
-
-1. システム環境設定を開く
-2. サウンド設定に移動
-3. 出力タブで「BlackHole 2ch」を選択
-   - これにより、システムの音声出力がBlackholeにルーティングされます
+OPENAI_API_KEY=your_api_key_here
+```
 
 ## 使用方法
 
-### 基本的な使用方法
+### 1. 音声の録音
 
 ```bash
-# 録音を開始
-./record_audio.py
+python record_audio.py
 ```
 
-### 利用可能なオプション
+録音の手順：
+1. 利用可能なオーディオデバイス一覧が表示されます
+2. 使用する入力デバイスのIDを入力
+3. 録音の準備:
+   - システム環境設定 > サウンド > 出力 で録音したいデバイスを選択
+   - オーディオMIDI設定を開き、複数出力装置を作成
+   - 複数出力装置に、録音したいデバイスとBlackHole 2chの両方を追加
+   - システム環境設定 > サウンド > 出力 で作成した複数出力装置を選択
+4. Enterキーを押して録音開始
+5. Ctrl+Cで録音停止
 
-- `-l, --list`: 利用可能なオーディオデバイスを表示
+オプション:
 - `-f, --filename`: 保存するファイル名を指定
-- `-r, --rate`: サンプリングレート（Hz）を指定
+- `-r, --rate`: サンプリングレートを指定（デフォルト: 48000Hz）
 
-### 使用例
+録音したファイルは`recordings`ディレクトリに保存されます。
+
+### 2. 文字起こし
 
 ```bash
-# デバイス一覧を表示
-./record_audio.py -l
-
-# 特定のファイル名で録音
-./record_audio.py -f my_recording.wav
-
-# サンプリングレートを48kHzに設定して録音
-./record_audio.py -r 48000
+python transcribe.py
 ```
 
-### 録音ファイルの保存場所
+- `recordings`ディレクトリ内の音声ファイルを自動で検出
+- 対応フォーマット: .wav, .mp3, .m4a
+- OpenAI Whisper APIを使用して高精度な文字起こし
+- 書き起こされたテキストは`transcripts`ディレクトリに保存
+- フォーマット: `[HH:MM:SS] 発言内容`
 
-録音したファイルは、プロジェクトディレクトリ内の`recordings`フォルダに保存されます：
+## 開発
 
-- ファイル名を指定しない場合：`recordings/recording_YYYYMMDD_HHMMSS.wav`
-- ファイル名を指定した場合：`recordings/指定したファイル名`
-
-録音開始時に保存先のパスが表示され、録音完了時にも確認メッセージが表示されます。
-
-### 録音の停止
-
-- 録音中はCtrl+Cを押すことで録音を停止できます
-- 録音中は経過時間が表示されます
-- 録音を停止すると、自動的にファイルが保存されます
-
-## 注意事項
-
-- 録音開始前に、システムの音声出力が「BlackHole 2ch」に設定されていることを確認してください
-- 録音終了後は、必要に応じてシステムの音声出力を元の設定に戻してください
-- 録音ファイルは自動的にWAV形式で保存されます
-- スクリプトを実行する前に、必ず仮想環境が有効になっていることを確認してください
-
-## トラブルシューティング
-
-1. `ModuleNotFoundError: No module named 'sounddevice'`などのエラーが表示される場合
-   - 仮想環境が有効になっているか確認（プロンプトに`(ai-gijiroku)`が表示されているか）
-   - 仮想環境を有効化: `pyenv activate ai-gijiroku`
-   - パッケージを再インストール: `pip install -r requirements.txt`
-
-2. BlackHoleデバイスが見つからない場合
-   - システム環境設定でBlackholeが正しくインストールされているか確認
-   - 必要に応じてBlackholeを再インストール
-
-3. 音声が録音されない場合
-   - システムの音声出力が「BlackHole 2ch」に設定されているか確認
-   - マイクの権限が正しく設定されているか確認
-
-4. その他のエラーが発生する場合
-   - 仮想環境が有効になっているか確認
-   - 必要なパッケージが正しくインストールされているか確認
-   - シェルを再起動して仮想環境を再読み込み: `exec $SHELL -l`
+テストの実行:
+```bash
+python -m pytest test_*.py -v

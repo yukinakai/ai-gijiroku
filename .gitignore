@@ -20,6 +20,10 @@ wheels/
 .installed.cfg
 *.egg
 
+# Project specific
+recordings/
+transcripts/
+
 # 仮想環境
 venv/
 ENV/
