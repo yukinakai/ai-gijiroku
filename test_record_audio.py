@@ -62,9 +62,12 @@ class TestRecordAudio(unittest.TestCase):
         mock_blackhole_stream = MagicMock()
         
         # read メソッドが呼ばれたときのデータを設定
-        mock_data = np.zeros((1024, 2))
-        mock_input_device_stream.read.return_value = (mock_data, None)
-        mock_blackhole_stream.read.return_value = (mock_data, None)
+        # 入力デバイスとBlackHoleで異なるテストデータを用意
+        mock_input_data = np.ones((1024, 2)) * 0.5  # 入力デバイスのデータ（0.5の値）
+        mock_blackhole_data = np.ones((1024, 2)) * 0.3  # BlackHoleのデータ（0.3の値）
+        
+        mock_input_device_stream.read.return_value = (mock_input_data, None)
+        mock_blackhole_stream.read.return_value = (mock_blackhole_data, None)
         
         # InputStream が呼ばれたときに異なるモックを返すように設定
         mock_input_stream.side_effect = [mock_input_device_stream, mock_blackhole_stream]
