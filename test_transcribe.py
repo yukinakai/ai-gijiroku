@@ -1,5 +1,4 @@
 import pytest
-from pathlib import Path
 import os
 from transcribe import format_timestamp, transcribe_audio, process_directory, process_single_file
 from unittest.mock import patch, MagicMock

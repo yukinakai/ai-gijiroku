@@ -1,9 +1,7 @@
 import unittest
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 import numpy as np
-import os
 from record_audio import record_audio, list_devices, find_blackhole_device
-from io import StringIO
 
 class TestRecordAudio(unittest.TestCase):
     def setUp(self):
@@ -56,7 +54,7 @@ class TestRecordAudio(unittest.TestCase):
     @patch('sounddevice.InputStream')
     @patch('builtins.input', return_value='')
     @patch('soundfile.write')
-    def test_record_audio_with_keyboard_interrupt(self, mock_sf_write, mock_input, mock_input_stream):
+    def test_record_audio_with_keyboard_interrupt(self, mock_input_stream):
         # ストリームのモック設定
         mock_input_device_stream = MagicMock()
         mock_blackhole_stream = MagicMock()
