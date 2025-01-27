@@ -23,11 +23,23 @@ brew install blackhole-2ch
 # pyenvで仮想環境を作成
 pyenv virtualenv 3.11.7 ai-gijiroku
 
+# プロジェクトディレクトリに移動
+cd /path/to/ai-gijiroku
+
 # 仮想環境を有効化
 pyenv local ai-gijiroku
 
+# シェルを再起動して仮想環境を反映
+exec $SHELL -l
+
 # 必要なパッケージをインストール
-pip install sounddevice soundfile numpy
+pip install -r requirements.txt
+```
+
+3. スクリプトの実行権限を設定
+
+```bash
+chmod +x record_audio.py
 ```
 
 ## システム設定
@@ -42,6 +54,10 @@ pip install sounddevice soundfile numpy
 ### 基本的な使用方法
 
 ```bash
+# 仮想環境が有効になっていることを確認（プロンプトに(ai-gijiroku)が表示されているか確認）
+# 表示されていない場合は以下のコマンドを実行
+pyenv activate ai-gijiroku
+
 # 30秒間録音
 ./record_audio.py -d 30
 ```
@@ -76,17 +92,24 @@ pip install sounddevice soundfile numpy
 - 録音開始前に、システムの音声出力が「BlackHole 2ch」に設定されていることを確認してください
 - 録音終了後は、必要に応じてシステムの音声出力を元の設定に戻してください
 - 録音ファイルは自動的にWAV形式で保存されます
+- スクリプトを実行する前に、必ず仮想環境が有効になっていることを確認してください
 
 ## トラブルシューティング
 
-1. BlackHoleデバイスが見つからない場合
+1. `ModuleNotFoundError: No module named 'sounddevice'`などのエラーが表示される場合
+   - 仮想環境が有効になっているか確認（プロンプトに`(ai-gijiroku)`が表示されているか）
+   - 仮想環境を有効化: `pyenv activate ai-gijiroku`
+   - パッケージを再インストール: `pip install -r requirements.txt`
+
+2. BlackHoleデバイスが見つからない場合
    - システム環境設定でBlackholeが正しくインストールされているか確認
    - 必要に応じてBlackholeを再インストール
 
-2. 音声が録音されない場合
+3. 音声が録音されない場合
    - システムの音声出力が「BlackHole 2ch」に設定されているか確認
    - マイクの権限が正しく設定されているか確認
 
-3. エラーが発生する場合
+4. その他のエラーが発生する場合
    - 仮想環境が有効になっているか確認
    - 必要なパッケージが正しくインストールされているか確認
+   - シェルを再起動して仮想環境を再読み込み: `exec $SHELL -l`
