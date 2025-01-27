@@ -1,81 +1,81 @@
 import os
-import whisper
-from datetime import timedelta
 from pathlib import Path
+from openai import OpenAI
+from datetime import timedelta
+from dotenv import load_dotenv
 
-def format_timestamp(seconds: float) -> str:
-    """秒数を[HH:MM:SS]形式の文字列に変換する"""
-    td = timedelta(seconds=seconds)
-    hours, remainder = divmod(td.seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    return f"[{hours:02d}:{minutes:02d}:{seconds:02d}]"
+# .envファイルから環境変数を読み込む
+load_dotenv()
 
-def transcribe_audio(audio_path: str, output_dir: str = "transcripts") -> str:
-    """
-    音声ファイルを文字起こしし、指定されたフォーマットでテキストファイルに保存する
-    
-    Args:
-        audio_path: 音声ファイルのパス
-        output_dir: 出力ディレクトリ（デフォルト: "transcripts"）
-    
-    Returns:
-        生成されたテキストファイルのパス
-    """
-    # 出力ディレクトリの作成
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Whisperモデルの読み込み
-    model = whisper.load_model("base")
-    
-    # 音声の文字起こし
-    result = model.transcribe(audio_path, language="ja")
-    
-    # 出力ファイル名の生成
-    audio_file = Path(audio_path)
-    output_path = Path(output_dir) / f"{audio_file.stem}.txt"
-    
-    # 結果をファイルに書き出し
-    with open(output_path, "w", encoding="utf-8") as f:
-        for segment in result["segments"]:
-            timestamp = format_timestamp(segment["start"])
-            text = segment["text"].strip()
-            f.write(f"{timestamp} {text}\n")
-    
-    return str(output_path)
+# OpenAI APIキーの確認
+if not os.getenv("OPENAI_API_KEY"):
+    raise ValueError("環境変数 OPENAI_API_KEY が設定されていません。.envファイルを確認してください。")
 
-def process_directory(input_dir: str = "recordings", output_dir: str = "transcripts") -> list[str]:
+# OpenAIクライアントの初期化
+client = OpenAI()
+
+def format_timestamp(seconds):
     """
-    指定されたディレクトリ内の全ての音声ファイルを処理する
-    
-    Args:
-        input_dir: 入力ディレクトリ（デフォルト: "recordings"）
-        output_dir: 出力ディレクトリ（デフォルト: "transcripts"）
-    
-    Returns:
-        生成されたテキストファイルのパスのリスト
+    秒数を[00:00:00]形式の文字列に変換する
     """
-    audio_extensions = {".mp3", ".wav", ".m4a", ".flac"}
-    processed_files = []
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    return f"[{hours:02d}:{minutes:02d}:{secs:02d}]"
+
+def transcribe_audio(audio_path):
+    """
+    音声ファイルを文字起こしする
+    """
+    # 音声ファイルを開く
+    with open(audio_path, "rb") as audio_file:
+        # OpenAI APIを使用して文字起こし
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_file,
+            language="ja",
+            response_format="verbose_json"
+        )
     
-    for file_path in Path(input_dir).glob("*"):
-        if file_path.suffix.lower() in audio_extensions:
-            output_path = transcribe_audio(str(file_path), output_dir)
-            processed_files.append(output_path)
+    # 結果を整形
+    transcription = []
+    for segment in transcript.segments:
+        timestamp = format_timestamp(segment.start)
+        text = segment.text.strip()
+        transcription.append(f"{timestamp} {text}")
     
-    return processed_files
+    return "\n".join(transcription)
+
+def process_directory(input_dir="recordings", output_dir="transcripts"):
+    """
+    指定されたディレクトリ内の音声ファイルを全て文字起こしする
+    """
+    input_path = Path(input_dir)
+    output_path = Path(output_dir)
+    output_path.mkdir(exist_ok=True)
+    
+    # サポートする音声フォーマット
+    audio_extensions = {".mp3", ".wav", ".m4a"}
+    
+    # 音声ファイルを名前でソート
+    audio_files = sorted([f for f in input_path.iterdir() if f.suffix.lower() in audio_extensions])
+    
+    for audio_file in audio_files:
+        try:
+            # 文字起こしの実行
+            transcription = transcribe_audio(str(audio_file))
+            
+            # 出力ファイル名の設定
+            output_file = output_path / f"{audio_file.stem}.txt"
+            
+            # 結果の保存
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(transcription)
+            
+            print(f"文字起こし完了: {audio_file.name} -> {output_file.name}")
+        
+        except Exception as e:
+            print(f"エラー発生 ({audio_file.name}): {str(e)}")
 
 if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="音声ファイルの文字起こしツール")
-    parser.add_argument("--input", "-i", default="recordings",
-                      help="入力ディレクトリのパス（デフォルト: recordings）")
-    parser.add_argument("--output", "-o", default="transcripts",
-                      help="出力ディレクトリのパス（デフォルト: transcripts）")
-    
-    args = parser.parse_args()
-    
-    processed_files = process_directory(args.input, args.output)
-    print(f"処理完了: {len(processed_files)}ファイルを変換しました")
-    for file_path in processed_files:
-        print(f"- {file_path}")
+    process_directory()
