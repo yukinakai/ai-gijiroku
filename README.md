@@ -5,7 +5,7 @@
 ## 前提条件
 
 - macOS
-- Python 3.11.7（pyenvで管理）
+- Python 3.11.0b3（pyenvで管理）
 - Blackhole 2ch（仮想オーディオドライバ）
 
 ## セットアップ
@@ -21,7 +21,7 @@ brew install blackhole-2ch
 
 ```bash
 # pyenvで仮想環境を作成
-pyenv virtualenv 3.11.7 ai-gijiroku
+pyenv virtualenv 3.11.0b3 ai-gijiroku # 3.11.0b3が最新
 
 # プロジェクトディレクトリに移動
 cd /path/to/ai-gijiroku
@@ -60,6 +60,9 @@ pyenv activate ai-gijiroku
 
 # 30秒間録音
 ./record_audio.py -d 30
+
+# エラーが出る場合は下記でも試す
+pathto-pyenv/.pyenv/versions/ai-gijiroku/bin/python record_audio.py -d 10
 ```
 
 ### 利用可能なオプション
