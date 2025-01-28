@@ -1,6 +1,5 @@
 import pytest
 import os
-import json
 from src.transcribe import (
     format_timestamp,
     transcribe_audio,
@@ -9,7 +8,6 @@ from src.transcribe import (
     calculate_audio_cost
 )
 from unittest.mock import patch, MagicMock
-from pathlib import Path
 
 def test_format_timestamp():
     """タイムスタンプのフォーマット機能をテストする"""

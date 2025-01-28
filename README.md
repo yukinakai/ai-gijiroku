@@ -24,7 +24,7 @@ OPENAI_API_KEY=your_api_key_here
 ### 1. 音声の録音
 
 ```bash
-python record_audio.py
+python src/record_audio.py
 ```
 
 録音の手順：
@@ -52,7 +52,7 @@ python record_audio.py
 録音完了後、デフォルトで自動的に文字起こしが実行されます。
 文字起こしをスキップする場合は、`--no-transcribe`オプションを使用してください：
 ```bash
-python record_audio.py --no-transcribe
+python src/record_audio.py --no-transcribe
 ```
 
 #### 手動文字起こし
@@ -61,17 +61,17 @@ python record_audio.py --no-transcribe
 
 1. 単一の音声ファイルを文字起こし
 ```bash
-python transcribe.py -f path/to/audio.wav
+python src/transcribe.py -f path/to/audio.wav
 ```
 
 2. ディレクトリ内のすべての音声ファイルを文字起こし
 ```bash
-python transcribe.py -d path/to/directory
+python vtranscribe.py -d path/to/directory
 ```
 
 3. デフォルトの`recordings`ディレクトリ内のファイルを文字起こし
 ```bash
-python transcribe.py
+python src/transcribe.py
 ```
 
 オプション:
@@ -89,4 +89,5 @@ python transcribe.py
 
 テストの実行:
 ```bash
-python -m pytest test_*.py -v
+python -m pytest tests/test_*.py -v
+```
