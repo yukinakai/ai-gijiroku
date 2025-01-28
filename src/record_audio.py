@@ -7,7 +7,7 @@ from datetime import datetime
 import os
 import time
 import sys
-from transcribe import process_single_file
+from src.transcribe import process_single_file
 
 # 録音ファイルの保存ディレクトリ
 RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'recordings')
