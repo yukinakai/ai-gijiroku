@@ -3,6 +3,8 @@ import argparse
 from pathlib import Path
 from openai import OpenAI
 from dotenv import load_dotenv
+import json
+from datetime import datetime
 
 # .envファイルから環境変数を読み込む
 load_dotenv()
@@ -22,6 +24,15 @@ def format_timestamp(seconds):
     minutes = int((seconds % 3600) // 60)
     secs = int(seconds % 60)
     return f"[{hours:02d}:{minutes:02d}:{secs:02d}]"
+
+def calculate_audio_cost(duration_seconds):
+    """
+    音声の長さからコストを計算する（Whisper APIの料金に基づく）
+    """
+    # Whisper APIの料金は1分あたり$0.006
+    cost_per_minute = 0.006
+    minutes = duration_seconds / 60
+    return round(minutes * cost_per_minute, 4)
 
 def transcribe_audio(audio_path):
     """
@@ -44,7 +55,20 @@ def transcribe_audio(audio_path):
         text = segment.text.strip()
         transcription.append(f"{timestamp} {text}")
     
-    return "\n".join(transcription)
+    # APIの使用情報を取得
+    duration = transcript.duration
+    cost = calculate_audio_cost(duration)
+    
+    # プロンプト情報を作成
+    prompt_info = {
+        "model": "whisper-1",
+        "language": "ja",
+        "duration_seconds": duration,
+        "cost_usd": cost,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    return "\n".join(transcription), prompt_info
 
 def process_single_file(input_file, output_dir="transcripts"):
     """
@@ -74,16 +98,26 @@ def process_single_file(input_file, output_dir="transcripts"):
     
     try:
         # 文字起こしの実行
-        transcription = transcribe_audio(str(input_path))
+        transcription, prompt_info = transcribe_audio(str(input_path))
         
         # 出力ファイル名の設定
         output_file = output_path / f"{input_path.stem}.txt"
         
-        # 結果の保存
+        # 結果の保存（プロンプト情報を含む）
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(transcription)
+            f.write("\n\n")
+            f.write("=" * 50)
+            f.write("\n[OpenAI API 使用情報]\n")
+            f.write(f"モデル: {prompt_info['model']}\n")
+            f.write(f"言語設定: {prompt_info['language']}\n")
+            f.write(f"音声の長さ: {prompt_info['duration_seconds']:.2f}秒\n")
+            f.write(f"推定コスト: ${prompt_info['cost_usd']:.4f}\n")
+            f.write(f"処理日時: {prompt_info['timestamp']}\n")
         
         print(f"文字起こし完了: {input_path.name} -> {output_file.name}")
+        print(f"音声の長さ: {prompt_info['duration_seconds']:.2f}秒")
+        print(f"推定コスト: ${prompt_info['cost_usd']:.4f}")
         return output_file
     
     except Exception as e:
@@ -104,9 +138,13 @@ def process_directory(input_dir="recordings", output_dir="transcripts"):
     # 音声ファイルを名前でソート
     audio_files = sorted([f for f in input_path.iterdir() if f.suffix.lower() in audio_extensions])
     
+    total_cost = 0
+    total_duration = 0
+    
     for audio_file in audio_files:
         try:
-            process_single_file(audio_file, output_dir)
+            output_file = process_single_file(audio_file, output_dir)
+            # コストと時間の集計は実装済みのため、ここでは追加の処理は不要
         except Exception as e:
             print(f"エラー発生 ({audio_file.name}): {str(e)}")
 
