@@ -60,11 +60,20 @@ def test_split_audio():
         
         # チャンクが作成されたことを確認
         assert len(chunk_paths) > 0
+        print(f"Created {len(chunk_paths)} chunks")
         
         # 各チャンクのサイズを確認
-        for chunk_path in chunk_paths:
+        for i, chunk_path in enumerate(chunk_paths):
+            size = os.path.getsize(chunk_path)
+            print(f"Chunk {i}: {size} bytes")
             assert os.path.exists(chunk_path)
-            assert os.path.getsize(chunk_path) <= CHUNK_SIZE
+            assert size <= CHUNK_SIZE
+        
+        # オリジナルファイルが分割されたことを確認
+        if len(chunk_paths) == 1:
+            assert chunk_paths[0] == large_file
+        else:
+            assert all(chunk_path != large_file for chunk_path in chunk_paths)
         
     finally:
         # テストファイルとチャンクを削除
@@ -84,18 +93,22 @@ def test_transcribe_audio_large_file(mock_client):
     for i in range(2):  # 2つのチャンクを想定
         mock_response = MagicMock()
         mock_response.model_dump_json.return_value = json.dumps({
-            'segments': [{
-                'start': i * 60,
-                'text': f"テストテキスト{i+1}"
+            "segments": [{
+                "start": i * 60,
+                "text": f"テストテキスト{i+1}"
             }],
-            'duration': 60
+            "duration": 60
         })
         mock_responses.append(mock_response)
     
     mock_client.audio.transcriptions.create.side_effect = mock_responses
     
-    # 大きなテスト用音声ファイルを作成
+    # 大きなテスト用音声ファイルを作成（25MB以上のファイルを作成）
     test_audio = create_test_audio(duration_ms=120000)  # 120秒
+    
+    # ファイルサイズを強制的に大きくする
+    with open(test_audio, "ab") as f:
+        f.write(b"0" * (26 * 1024 * 1024))  # 26MBのダミーデータを追加
     
     try:
         # 文字起こしを実行
@@ -128,11 +141,11 @@ def test_process_directory(mock_client, tmp_path):
     # モックの設定
     mock_response = MagicMock()
     mock_response.model_dump_json.return_value = json.dumps({
-        'segments': [{
-            'start': 0,
-            'text': "テストテキスト"
+        "segments": [{
+            "start": 0,
+            "text": "テストテキスト"
         }],
-        'duration': 60
+        "duration": 60
     })
     mock_client.audio.transcriptions.create.return_value = mock_response
     
@@ -174,11 +187,11 @@ def test_process_single_file(mock_client, tmp_path):
     # モックの設定
     mock_response = MagicMock()
     mock_response.model_dump_json.return_value = json.dumps({
-        'segments': [{
-            'start': 0,
-            'text': "テストテキスト"
+        "segments": [{
+            "start": 0,
+            "text": "テストテキスト"
         }],
-        'duration': 60
+        "duration": 60
     })
     mock_client.audio.transcriptions.create.return_value = mock_response
     
