@@ -52,9 +52,16 @@ def split_audio(audio_path):
     # 音声ファイルを読み込む
     audio = AudioSegment.from_file(audio_path)
     
-    # テスト用に常に分割するように変更（実際の実装では、ファイルサイズに基づいて判断）
-    # チャンクの長さを計算（音声の長さを2分割）
-    chunk_duration = len(audio) // 2
+    # ファイルサイズを取得
+    file_size = os.path.getsize(audio_path)
+    
+    if file_size <= CHUNK_SIZE:
+        # ファイルサイズが20MB以下の場合は分割不要
+        return [audio_path]
+    
+    # チャンクの数を計算
+    num_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE  # 切り上げ除算
+    chunk_duration = len(audio) // num_chunks
     chunks = []
     
     # 一時ディレクトリを作成
@@ -142,7 +149,7 @@ def transcribe_audio(audio_path):
     
     return "\n".join(all_transcriptions), prompt_info
 
-def process_single_file(input_file, output_dir="transcripts"):
+def process_single_file(input_file, output_dir="src/transcripts"):
     """
     単一の音声ファイルを文字起こしする
     
