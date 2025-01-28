@@ -5,6 +5,8 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import json
 from datetime import datetime
+from pydub import AudioSegment
+import tempfile
 
 # .envファイルから環境変数を読み込む
 load_dotenv()
@@ -15,6 +17,9 @@ if not os.getenv("OPENAI_API_KEY"):
 
 # OpenAIクライアントの初期化
 client = OpenAI()
+
+# チャンクサイズを20MBに設定（バイト単位）
+CHUNK_SIZE = 20 * 1024 * 1024
 
 def format_timestamp(seconds):
     """
@@ -34,43 +39,117 @@ def calculate_audio_cost(duration_seconds):
     minutes = duration_seconds / 60
     return round(minutes * cost_per_minute, 4)
 
+def split_audio(audio_path):
+    """
+    音声ファイルを20MB以下のチャンクに分割する
+    
+    Args:
+        audio_path (str): 入力音声ファイルのパス
+    
+    Returns:
+        list: 一時ファイルのパスのリスト
+    """
+    # 音声ファイルを読み込む
+    audio = AudioSegment.from_file(audio_path)
+    
+    # ファイルサイズを取得
+    file_size = os.path.getsize(audio_path)
+    
+    if file_size <= CHUNK_SIZE:
+        # ファイルサイズが20MB以下の場合は分割不要
+        return [audio_path]
+    
+    # チャンクの数を計算
+    num_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE  # 切り上げ除算
+    chunk_duration = len(audio) // num_chunks
+    chunks = []
+    
+    # 一時ディレクトリを作成
+    temp_dir = tempfile.mkdtemp()
+    
+    # 音声を分割して一時ファイルとして保存
+    for i, start in enumerate(range(0, len(audio), chunk_duration)):
+        chunk = audio[start:start + chunk_duration]
+        chunk_path = os.path.join(temp_dir, f"chunk_{i}.wav")
+        chunk.export(chunk_path, format="wav")
+        chunks.append(chunk_path)
+    
+    return chunks
+
+def get_response_data(response):
+    """
+    OpenAI APIのレスポンスからデータを取得する
+    """
+    if hasattr(response, 'model_dump_json'):
+        # 新しいバージョンのOpenAI APIの場合
+        return json.loads(response.model_dump_json())
+    elif hasattr(response, '__getitem__'):
+        # 辞書形式の場合
+        return response
+    else:
+        # その他の場合（属性としてアクセス）
+        return {
+            'segments': [{
+                'start': segment.start,
+                'text': segment.text
+            } for segment in response.segments],
+            'duration': response.duration
+        }
+
 def transcribe_audio(audio_path):
     """
     音声ファイルを文字起こしする
     """
-    # 音声ファイルを開く
-    with open(audio_path, "rb") as audio_file:
-        # OpenAI APIを使用して文字起こし
-        transcript = client.audio.transcriptions.create(
-            model="whisper-1",
-            file=audio_file,
-            language="ja",
-            response_format="verbose_json"
-        )
+    # 音声ファイルを分割
+    chunk_paths = split_audio(audio_path)
     
-    # 結果を整形
-    transcription = []
-    for segment in transcript.segments:
-        timestamp = format_timestamp(segment.start)
-        text = segment.text.strip()
-        transcription.append(f"{timestamp} {text}")
+    all_transcriptions = []
+    total_duration = 0
     
-    # APIの使用情報を取得
-    duration = transcript.duration
-    cost = calculate_audio_cost(duration)
+    # 各チャンクを処理
+    for chunk_path in chunk_paths:
+        with open(chunk_path, "rb") as audio_file:
+            # OpenAI APIを使用して文字起こし
+            response = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                language="ja",
+                response_format="verbose_json"
+            )
+            
+            # レスポンスデータを取得
+            response_data = get_response_data(response)
+            
+            # 結果を整形
+            for segment in response_data['segments']:
+                timestamp = format_timestamp(segment['start'] + total_duration)
+                text = segment['text'].strip()
+                all_transcriptions.append(f"{timestamp} {text}")
+            
+            # チャンクの長さを合計に追加
+            total_duration += response_data['duration']
     
-    # プロンプト情報を作成
+    # 一時ファイルを削除（オリジナルファイル以外）
+    if len(chunk_paths) > 1:
+        temp_dir = os.path.dirname(chunk_paths[0])
+        for chunk_path in chunk_paths:
+            if chunk_path != audio_path:
+                os.remove(chunk_path)
+        os.rmdir(temp_dir)
+    
+    # APIの使用情報を作成
+    cost = calculate_audio_cost(total_duration)
     prompt_info = {
         "model": "whisper-1",
         "language": "ja",
-        "duration_seconds": duration,
+        "duration_seconds": total_duration,
         "cost_usd": cost,
         "timestamp": datetime.now().isoformat()
     }
     
-    return "\n".join(transcription), prompt_info
+    return "\n".join(all_transcriptions), prompt_info
 
-def process_single_file(input_file, output_dir="transcripts"):
+def process_single_file(input_file, output_dir="src/transcripts"):
     """
     単一の音声ファイルを文字起こしする
     
@@ -124,7 +203,7 @@ def process_single_file(input_file, output_dir="transcripts"):
         print(f"エラー発生 ({input_path.name}): {str(e)}")
         raise
 
-def process_directory(input_dir="recordings", output_dir="transcripts"):
+def process_directory(input_dir="recordings", output_dir="src/transcripts"):
     """
     指定されたディレクトリ内の音声ファイルを全て文字起こしする
     """
@@ -152,7 +231,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="音声ファイルの文字起こしを行います")
     parser.add_argument("-f", "--file", help="文字起こしする音声ファイルのパス")
     parser.add_argument("-d", "--directory", help="文字起こしする音声ファイルのディレクトリ")
-    parser.add_argument("-o", "--output", default="transcripts", help="出力先ディレクトリ（デフォルト: transcripts）")
+    parser.add_argument("-o", "--output", default="src/transcripts", help="出力先ディレクトリ（デフォルト: transcripts）")
     
     args = parser.parse_args()
     

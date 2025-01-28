@@ -1,13 +1,19 @@
 import pytest
 import os
+import json
+import tempfile
+from pathlib import Path
 from src.transcribe import (
     format_timestamp,
     transcribe_audio,
     process_directory,
     process_single_file,
-    calculate_audio_cost
+    calculate_audio_cost,
+    split_audio,
+    CHUNK_SIZE
 )
 from unittest.mock import patch, MagicMock
+from pydub import AudioSegment
 
 def test_format_timestamp():
     """タイムスタンプのフォーマット機能をテストする"""
@@ -24,55 +30,123 @@ def test_calculate_audio_cost():
     # 2分の音声（$0.012）
     assert calculate_audio_cost(120) == 0.012
 
-@patch('openai.OpenAI')
-def test_transcribe_audio(mock_openai):
-    """音声ファイルの文字起こし機能をテストする"""
+def create_test_audio(duration_ms=5000, sample_rate=44100):
+    """
+    テスト用の音声ファイルを作成する
+    
+    Args:
+        duration_ms (int): 音声の長さ（ミリ秒）
+        sample_rate (int): サンプルレート
+    
+    Returns:
+        str: 作成した音声ファイルのパス
+    """
+    # 無音の音声セグメントを作成
+    audio = AudioSegment.silent(duration=duration_ms)
+    
+    # 一時ファイルを作成
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
+        audio.export(temp_file.name, format="wav")
+        return temp_file.name
+
+def test_split_audio():
+    """音声分割機能をテストする"""
+    # 大きなファイルを作成（30MB相当）
+    large_file = create_test_audio(duration_ms=30000)
+    
+    try:
+        # ファイルを分割
+        chunk_paths = split_audio(large_file)
+        
+        # チャンクが作成されたことを確認
+        assert len(chunk_paths) > 0
+        print(f"Created {len(chunk_paths)} chunks")
+        
+        # 各チャンクのサイズを確認
+        for i, chunk_path in enumerate(chunk_paths):
+            size = os.path.getsize(chunk_path)
+            print(f"Chunk {i}: {size} bytes")
+            assert os.path.exists(chunk_path)
+            assert size <= CHUNK_SIZE
+        
+        # オリジナルファイルが分割されたことを確認
+        if len(chunk_paths) == 1:
+            assert chunk_paths[0] == large_file
+        else:
+            assert all(chunk_path != large_file for chunk_path in chunk_paths)
+        
+    finally:
+        # テストファイルとチャンクを削除
+        os.remove(large_file)
+        if len(chunk_paths) > 1:
+            temp_dir = os.path.dirname(chunk_paths[0])
+            for chunk_path in chunk_paths:
+                if chunk_path != large_file:
+                    os.remove(chunk_path)
+            os.rmdir(temp_dir)
+
+@patch('src.transcribe.client')
+def test_transcribe_audio_large_file(mock_client):
+    """大きな音声ファイルの文字起こし機能をテストする"""
     # モックの設定
-    mock_client = MagicMock()
-    mock_openai.return_value = mock_client
+    mock_responses = []
+    for i in range(2):  # 2つのチャンクを想定
+        mock_response = MagicMock()
+        mock_response.model_dump_json.return_value = json.dumps({
+            "segments": [{
+                "start": i * 60,
+                "text": f"テストテキスト{i+1}"
+            }],
+            "duration": 60
+        })
+        mock_responses.append(mock_response)
     
-    mock_response = MagicMock()
-    mock_segment = MagicMock()
-    mock_segment.start = 0
-    mock_segment.text = "テストテキスト"
-    mock_response.segments = [mock_segment]
-    mock_response.duration = 60  # 1分の音声を想定
+    mock_client.audio.transcriptions.create.side_effect = mock_responses
     
-    mock_client.audio.transcriptions.create.return_value = mock_response
+    # 大きなテスト用音声ファイルを作成（25MB以上のファイルを作成）
+    test_audio = create_test_audio(duration_ms=120000)  # 120秒
     
-    # テスト用の音声ファイル
-    test_audio = "test_audio.wav"
+    # ファイルサイズを強制的に大きくする
+    with open(test_audio, "ab") as f:
+        f.write(b"0" * (26 * 1024 * 1024))  # 26MBのダミーデータを追加
     
-    if os.path.exists(test_audio):
+    try:
+        # 文字起こしを実行
         transcription, prompt_info = transcribe_audio(test_audio)
+        
         # 文字起こしテキストの確認
         assert isinstance(transcription, str)
         assert len(transcription) > 0
-        assert transcription.startswith("[")
-        assert "]" in transcription
+        assert "テストテキスト1" in transcription
+        assert "テストテキスト2" in transcription
         
         # プロンプト情報の確認
         assert isinstance(prompt_info, dict)
         assert prompt_info["model"] == "whisper-1"
         assert prompt_info["language"] == "ja"
-        assert prompt_info["duration_seconds"] == 60
-        assert prompt_info["cost_usd"] == 0.006
+        assert prompt_info["duration_seconds"] == 120
+        assert prompt_info["cost_usd"] == 0.012
         assert "timestamp" in prompt_info
+        
+        # APIが複数回呼び出されたことを確認
+        assert mock_client.audio.transcriptions.create.call_count == 2
+        
+    finally:
+        # テストファイルを削除
+        os.remove(test_audio)
 
-@patch('openai.OpenAI')
-def test_process_directory(mock_openai, tmp_path):
+@patch('src.transcribe.client')
+def test_process_directory(mock_client, tmp_path):
     """ディレクトリ処理機能をテストする"""
     # モックの設定
-    mock_client = MagicMock()
-    mock_openai.return_value = mock_client
-    
     mock_response = MagicMock()
-    mock_segment = MagicMock()
-    mock_segment.start = 0
-    mock_segment.text = "テストテキスト"
-    mock_response.segments = [mock_segment]
-    mock_response.duration = 60
-    
+    mock_response.model_dump_json.return_value = json.dumps({
+        "segments": [{
+            "start": 0,
+            "text": "テストテキスト"
+        }],
+        "duration": 60
+    })
     mock_client.audio.transcriptions.create.return_value = mock_response
     
     # テスト用のディレクトリ構造を作成
@@ -80,14 +154,13 @@ def test_process_directory(mock_openai, tmp_path):
     output_dir = tmp_path / "transcripts"
     input_dir.mkdir()
     
-    # テスト用の音声ファイル
-    test_audio = "test_audio.wav"
+    # テスト用の音声ファイルを作成
+    test_audio = create_test_audio()
+    test_audio_path = input_dir / "test.wav"
+    import shutil
+    shutil.copy(test_audio, test_audio_path)
     
-    if os.path.exists(test_audio):
-        # テスト用音声ファイルをコピー
-        import shutil
-        shutil.copy(test_audio, input_dir / "test.wav")
-        
+    try:
         # 処理を実行
         process_directory(str(input_dir), str(output_dir))
         
@@ -102,30 +175,33 @@ def test_process_directory(mock_openai, tmp_path):
             assert "[OpenAI API 使用情報]" in content
             assert "モデル: whisper-1" in content
             assert "推定コスト: $" in content
+            assert "テストテキスト" in content
+    
+    finally:
+        # テストファイルを削除
+        os.remove(test_audio)
 
-@patch('openai.OpenAI')
-def test_process_single_file(mock_openai, tmp_path):
+@patch('src.transcribe.client')
+def test_process_single_file(mock_client, tmp_path):
     """単一ファイル処理機能をテストする"""
     # モックの設定
-    mock_client = MagicMock()
-    mock_openai.return_value = mock_client
-    
     mock_response = MagicMock()
-    mock_segment = MagicMock()
-    mock_segment.start = 0
-    mock_segment.text = "テストテキスト"
-    mock_response.segments = [mock_segment]
-    mock_response.duration = 60
-    
+    mock_response.model_dump_json.return_value = json.dumps({
+        "segments": [{
+            "start": 0,
+            "text": "テストテキスト"
+        }],
+        "duration": 60
+    })
     mock_client.audio.transcriptions.create.return_value = mock_response
     
     # テスト用のディレクトリ構造を作成
     output_dir = tmp_path / "transcripts"
     
-    # テスト用の音声ファイル
-    test_audio = "test_audio.wav"
+    # テスト用の音声ファイルを作成
+    test_audio = create_test_audio()
     
-    if os.path.exists(test_audio):
+    try:
         # 処理を実行
         output_file = process_single_file(test_audio, str(output_dir))
         
@@ -145,6 +221,10 @@ def test_process_single_file(mock_openai, tmp_path):
             assert "音声の長さ:" in content
             assert "推定コスト: $" in content
             assert "処理日時:" in content
+    
+    finally:
+        # テストファイルを削除
+        os.remove(test_audio)
 
 def test_process_single_file_invalid_file():
     """存在しないファイルを指定した場合のエラーテスト"""
