@@ -1,7 +1,7 @@
 import pytest
 import os
 import json
-from transcribe import (
+from src.transcribe import (
     format_timestamp,
     transcribe_audio,
     process_directory,

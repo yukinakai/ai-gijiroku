@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch, MagicMock
 import numpy as np
-from record_audio import record_audio, list_devices, find_blackhole_device
+from src.record_audio import record_audio, list_devices, find_blackhole_device
 
 class TestRecordAudio(unittest.TestCase):
     def setUp(self):
@@ -120,9 +120,9 @@ class TestRecordAudio(unittest.TestCase):
             mock_print.assert_any_call("\nエラー: デバイス 2 は入力デバイスではありません。")
 
     def test_main_function_with_transcribe(self):
-        with patch('record_audio.list_devices') as mock_list_devices, \
-             patch('record_audio.record_audio') as mock_record_audio, \
-             patch('record_audio.process_single_file') as mock_process_single_file, \
+        with patch('src.record_audio.list_devices') as mock_list_devices, \
+             patch('src.record_audio.record_audio') as mock_record_audio, \
+             patch('src.record_audio.process_single_file') as mock_process_single_file, \
              patch('argparse.ArgumentParser.parse_args') as mock_args, \
              patch('builtins.input', return_value='0') as mock_input:
             
@@ -141,7 +141,7 @@ class TestRecordAudio(unittest.TestCase):
             mock_transcript_path = "transcripts/test_audio.txt"
             mock_process_single_file.return_value = mock_transcript_path
             
-            from record_audio import main
+            from src.record_audio import main
             main()
             
             # 各関数が正しく呼び出されたことを確認
@@ -151,9 +151,9 @@ class TestRecordAudio(unittest.TestCase):
             mock_input.assert_called_once()
 
     def test_main_function_without_transcribe(self):
-        with patch('record_audio.list_devices') as mock_list_devices, \
-             patch('record_audio.record_audio') as mock_record_audio, \
-             patch('record_audio.process_single_file') as mock_process_single_file, \
+        with patch('src.record_audio.list_devices') as mock_list_devices, \
+             patch('src.record_audio.record_audio') as mock_record_audio, \
+             patch('src.record_audio.process_single_file') as mock_process_single_file, \
              patch('argparse.ArgumentParser.parse_args') as mock_args, \
              patch('builtins.input', return_value='0') as mock_input:
             
@@ -168,7 +168,7 @@ class TestRecordAudio(unittest.TestCase):
             mock_audio_path = "recordings/test_audio.wav"
             mock_record_audio.return_value = mock_audio_path
             
-            from record_audio import main
+            from src.record_audio import main
             main()
             
             # 各関数が正しく呼び出されたことを確認
