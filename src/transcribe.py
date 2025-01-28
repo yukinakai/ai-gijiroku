@@ -203,7 +203,7 @@ def process_single_file(input_file, output_dir="src/transcripts"):
         print(f"エラー発生 ({input_path.name}): {str(e)}")
         raise
 
-def process_directory(input_dir="recordings", output_dir="transcripts"):
+def process_directory(input_dir="recordings", output_dir="src/transcripts"):
     """
     指定されたディレクトリ内の音声ファイルを全て文字起こしする
     """
@@ -231,7 +231,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="音声ファイルの文字起こしを行います")
     parser.add_argument("-f", "--file", help="文字起こしする音声ファイルのパス")
     parser.add_argument("-d", "--directory", help="文字起こしする音声ファイルのディレクトリ")
-    parser.add_argument("-o", "--output", default="transcripts", help="出力先ディレクトリ（デフォルト: transcripts）")
+    parser.add_argument("-o", "--output", default="src/transcripts", help="出力先ディレクトリ（デフォルト: transcripts）")
     
     args = parser.parse_args()
     
