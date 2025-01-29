@@ -12,6 +12,9 @@ from src.transcribe import process_single_file
 # 録音ファイルの保存ディレクトリ
 RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'recordings')
 
+# 最小録音時間（秒）
+MIN_RECORDING_DURATION = 0.5  # Whisper APIの制限（0.1秒）より余裕を持たせる
+
 def list_devices():
     """利用可能なオーディオデバイスを一覧表示"""
     devices = sd.query_devices()
@@ -89,6 +92,7 @@ def record_audio(filename=None, sample_rate=48000, input_device_id=None):
 
     # 録音データを格納するリスト
     frames = []
+    recording_duration = 0
     
     try:
         print("\n録音を開始します...")
@@ -136,6 +140,7 @@ def record_audio(filename=None, sample_rate=48000, input_device_id=None):
             
             # 経過時間を表示
             current_time = time.time() - start_time
+            recording_duration = current_time  # 録音時間を保存
             print_progress(current_time)
 
     except KeyboardInterrupt:
@@ -150,7 +155,14 @@ def record_audio(filename=None, sample_rate=48000, input_device_id=None):
             blackhole_stream.close()
 
         if frames:
+            # 録音時間のチェック
+            if recording_duration < MIN_RECORDING_DURATION:
+                print(f"\nエラー: 録音時間が短すぎます（{recording_duration:.2f}秒）")
+                print(f"最小録音時間は{MIN_RECORDING_DURATION}秒です。")
+                return None
+
             print("\n録音処理中...")
+            print(f"録音時間: {recording_duration:.2f}秒")
             
             try:
                 # 録音データを numpy 配列に変換
@@ -170,6 +182,9 @@ def record_audio(filename=None, sample_rate=48000, input_device_id=None):
             except Exception as e:
                 print(f"\n録音データの処理中にエラーが発生しました: {str(e)}")
                 return None
+        else:
+            print("\nエラー: 録音データが空です。")
+            return None
 
 def main():
     parser = argparse.ArgumentParser(description='オーディオ録音スクリプト')
