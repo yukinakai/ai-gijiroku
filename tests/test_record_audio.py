@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import patch, MagicMock
 import numpy as np
-import time
 from src.record_audio import record_audio, list_devices, find_blackhole_device, MIN_RECORDING_DURATION
 
 class TestRecordAudio(unittest.TestCase):
