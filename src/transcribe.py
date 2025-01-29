@@ -39,6 +39,22 @@ def calculate_audio_cost(duration_seconds):
     minutes = duration_seconds / 60
     return round(minutes * cost_per_minute, 4)
 
+def get_audio_duration(audio_path):
+    """
+    音声ファイルの長さを取得する
+    
+    Args:
+        audio_path (str): 音声ファイルのパス
+    
+    Returns:
+        float: 音声の長さ（秒）
+    """
+    try:
+        audio = AudioSegment.from_file(audio_path)
+        return len(audio) / 1000.0
+    except Exception as e:
+        raise ValueError(f"音声ファイルの読み込み中にエラーが発生しました: {str(e)}")
+
 def split_audio(audio_path):
     """
     音声ファイルを20MB以下のチャンクに分割する
@@ -49,32 +65,36 @@ def split_audio(audio_path):
     Returns:
         list: 一時ファイルのパスのリスト
     """
-    # 音声ファイルを読み込む
-    audio = AudioSegment.from_file(audio_path)
-    
-    # ファイルサイズを取得
-    file_size = os.path.getsize(audio_path)
-    
-    if file_size <= CHUNK_SIZE:
-        # ファイルサイズが20MB以下の場合は分割不要
-        return [audio_path]
-    
-    # チャンクの数を計算
-    num_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE  # 切り上げ除算
-    chunk_duration = len(audio) // num_chunks
-    chunks = []
-    
-    # 一時ディレクトリを作成
-    temp_dir = tempfile.mkdtemp()
-    
-    # 音声を分割して一時ファイルとして保存
-    for i, start in enumerate(range(0, len(audio), chunk_duration)):
-        chunk = audio[start:start + chunk_duration]
-        chunk_path = os.path.join(temp_dir, f"chunk_{i}.wav")
-        chunk.export(chunk_path, format="wav")
-        chunks.append(chunk_path)
-    
-    return chunks
+    try:
+        # 音声ファイルを読み込む
+        audio = AudioSegment.from_file(audio_path)
+        
+        # ファイルサイズを取得
+        file_size = os.path.getsize(audio_path)
+        
+        if file_size <= CHUNK_SIZE:
+            # ファイルサイズが20MB以下の場合は分割不要
+            return [audio_path]
+        
+        # チャンクの数を計算
+        num_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE  # 切り上げ除算
+        chunk_duration = len(audio) // num_chunks
+        chunks = []
+        
+        # 一時ディレクトリを作成
+        temp_dir = tempfile.mkdtemp()
+        
+        # 音声を分割して一時ファイルとして保存
+        for i, start in enumerate(range(0, len(audio), chunk_duration)):
+            chunk = audio[start:start + chunk_duration]
+            chunk_path = os.path.join(temp_dir, f"chunk_{i}.wav")
+            chunk.export(chunk_path, format="wav")
+            chunks.append(chunk_path)
+        
+        return chunks
+    except Exception as e:
+        print(f"音声ファイルの処理中にエラーが発生しました: {str(e)}")
+        raise
 
 def get_response_data(response):
     """
@@ -105,29 +125,42 @@ def transcribe_audio(audio_path):
     
     all_transcriptions = []
     total_duration = 0
+    valid_chunks = False  # 有効なチャンクが1つでもあるかどうか
     
     # 各チャンクを処理
     for chunk_path in chunk_paths:
-        with open(chunk_path, "rb") as audio_file:
-            # OpenAI APIを使用して文字起こし
-            response = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                language="ja",
-                response_format="verbose_json"
-            )
+        try:
+            # チャンクの長さをチェック
+            chunk_duration = get_audio_duration(chunk_path)
+            if chunk_duration < 0.1:
+                print(f"警告: チャンク {os.path.basename(chunk_path)} が短すぎます（{chunk_duration:.3f}秒）。スキップします。")
+                continue
             
-            # レスポンスデータを取得
-            response_data = get_response_data(response)
-            
-            # 結果を整形
-            for segment in response_data['segments']:
-                timestamp = format_timestamp(segment['start'] + total_duration)
-                text = segment['text'].strip()
-                all_transcriptions.append(f"{timestamp} {text}")
-            
-            # チャンクの長さを合計に追加
-            total_duration += response_data['duration']
+            with open(chunk_path, "rb") as audio_file:
+                # OpenAI APIを使用して文字起こし
+                response = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    language="ja",
+                    response_format="verbose_json"
+                )
+                
+                # レスポンスデータを取得
+                response_data = get_response_data(response)
+                
+                # 結果を整形
+                for segment in response_data['segments']:
+                    timestamp = format_timestamp(segment['start'] + total_duration)
+                    text = segment['text'].strip()
+                    all_transcriptions.append(f"{timestamp} {text}")
+                
+                # チャンクの長さを合計に追加
+                total_duration += response_data['duration']
+                valid_chunks = True
+                
+        except Exception as e:
+            if "音声ファイルが短すぎます" not in str(e):
+                raise ValueError(f"文字起こし処理中にエラーが発生しました: {str(e)}")
     
     # 一時ファイルを削除（オリジナルファイル以外）
     if len(chunk_paths) > 1:
@@ -136,6 +169,10 @@ def transcribe_audio(audio_path):
             if chunk_path != audio_path:
                 os.remove(chunk_path)
         os.rmdir(temp_dir)
+    
+    # 有効なチャンクが1つもない場合はエラー
+    if not valid_chunks:
+        raise ValueError("処理可能な音声チャンクがありません。全てのチャンクが0.1秒未満です。")
     
     # APIの使用情報を作成
     cost = calculate_audio_cost(total_duration)

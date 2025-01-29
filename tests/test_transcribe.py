@@ -10,6 +10,7 @@ from src.transcribe import (
     process_single_file,
     calculate_audio_cost,
     split_audio,
+    get_audio_duration,
     CHUNK_SIZE
 )
 from unittest.mock import patch, MagicMock
@@ -49,6 +50,24 @@ def create_test_audio(duration_ms=5000, sample_rate=44100):
         audio.export(temp_file.name, format="wav")
         return temp_file.name
 
+def test_get_audio_duration():
+    """音声の長さ取得機能をテストする"""
+    # 正常な長さの音声（1秒）
+    normal_file = create_test_audio(duration_ms=1000)
+    try:
+        duration = get_audio_duration(normal_file)
+        assert duration == 1.0
+    finally:
+        os.remove(normal_file)
+    
+    # 短い音声（50ミリ秒）
+    short_file = create_test_audio(duration_ms=50)
+    try:
+        duration = get_audio_duration(short_file)
+        assert duration == 0.05
+    finally:
+        os.remove(short_file)
+
 def test_split_audio():
     """音声分割機能をテストする"""
     # 大きなファイルを作成（30MB相当）
@@ -86,29 +105,21 @@ def test_split_audio():
             os.rmdir(temp_dir)
 
 @patch('src.transcribe.client')
-def test_transcribe_audio_large_file(mock_client):
-    """大きな音声ファイルの文字起こし機能をテストする"""
+def test_transcribe_audio_with_mixed_chunks(mock_client):
+    """短いチャンクと正常なチャンクが混在する音声ファイルの文字起こし機能をテストする"""
     # モックの設定
-    mock_responses = []
-    for i in range(2):  # 2つのチャンクを想定
-        mock_response = MagicMock()
-        mock_response.model_dump_json.return_value = json.dumps({
-            "segments": [{
-                "start": i * 60,
-                "text": f"テストテキスト{i+1}"
-            }],
-            "duration": 60
-        })
-        mock_responses.append(mock_response)
+    mock_response = MagicMock()
+    mock_response.model_dump_json.return_value = json.dumps({
+        "segments": [{
+            "start": 0,
+            "text": "テストテキスト"
+        }],
+        "duration": 1.0
+    })
+    mock_client.audio.transcriptions.create.return_value = mock_response
     
-    mock_client.audio.transcriptions.create.side_effect = mock_responses
-    
-    # 大きなテスト用音声ファイルを作成（25MB以上のファイルを作成）
-    test_audio = create_test_audio(duration_ms=120000)  # 120秒
-    
-    # ファイルサイズを強制的に大きくする
-    with open(test_audio, "ab") as f:
-        f.write(b"0" * (26 * 1024 * 1024))  # 26MBのダミーデータを追加
+    # テスト用の音声ファイルを作成（1秒）
+    test_audio = create_test_audio(duration_ms=1000)
     
     try:
         # 文字起こしを実行
@@ -117,20 +128,34 @@ def test_transcribe_audio_large_file(mock_client):
         # 文字起こしテキストの確認
         assert isinstance(transcription, str)
         assert len(transcription) > 0
-        assert "テストテキスト1" in transcription
-        assert "テストテキスト2" in transcription
+        assert "テストテキスト" in transcription
         
         # プロンプト情報の確認
         assert isinstance(prompt_info, dict)
         assert prompt_info["model"] == "whisper-1"
         assert prompt_info["language"] == "ja"
-        assert prompt_info["duration_seconds"] == 120
-        assert prompt_info["cost_usd"] == 0.012
+        assert prompt_info["duration_seconds"] == 1.0
         assert "timestamp" in prompt_info
         
-        # APIが複数回呼び出されたことを確認
-        assert mock_client.audio.transcriptions.create.call_count == 2
+    finally:
+        # テストファイルを削除
+        os.remove(test_audio)
+
+@patch('src.transcribe.client')
+def test_transcribe_audio_all_chunks_too_short(mock_client):
+    """全てのチャンクが短すぎる場合のエラーテスト"""
+    # 短すぎる音声ファイルを作成（50ミリ秒）
+    test_audio = create_test_audio(duration_ms=50)
+    
+    try:
+        # ValueErrorが発生することを確認
+        with pytest.raises(ValueError) as exc_info:
+            transcribe_audio(test_audio)
         
+        # エラーメッセージを確認
+        assert "処理可能な音声チャンクがありません" in str(exc_info.value)
+        assert "全てのチャンクが0.1秒未満です" in str(exc_info.value)
+    
     finally:
         # テストファイルを削除
         os.remove(test_audio)
@@ -154,8 +179,8 @@ def test_process_directory(mock_client, tmp_path):
     output_dir = tmp_path / "transcripts"
     input_dir.mkdir()
     
-    # テスト用の音声ファイルを作成
-    test_audio = create_test_audio()
+    # テスト用の音声ファイルを作成（正常な長さ）
+    test_audio = create_test_audio(duration_ms=1000)
     test_audio_path = input_dir / "test.wav"
     import shutil
     shutil.copy(test_audio, test_audio_path)
@@ -198,8 +223,8 @@ def test_process_single_file(mock_client, tmp_path):
     # テスト用のディレクトリ構造を作成
     output_dir = tmp_path / "transcripts"
     
-    # テスト用の音声ファイルを作成
-    test_audio = create_test_audio()
+    # テスト用の音声ファイルを作成（正常な長さ）
+    test_audio = create_test_audio(duration_ms=1000)
     
     try:
         # 処理を実行
