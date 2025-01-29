@@ -85,6 +85,24 @@ def test_split_audio():
                     os.remove(chunk_path)
             os.rmdir(temp_dir)
 
+def test_split_audio_too_short():
+    """短すぎる音声ファイルのエラーハンドリングをテストする"""
+    # 0.1秒未満の音声ファイルを作成（50ミリ秒）
+    short_file = create_test_audio(duration_ms=50)
+    
+    try:
+        # ValueErrorが発生することを確認
+        with pytest.raises(ValueError) as exc_info:
+            split_audio(short_file)
+        
+        # エラーメッセージを確認
+        assert "音声ファイルが短すぎます" in str(exc_info.value)
+        assert "0.050秒" in str(exc_info.value)
+    
+    finally:
+        # テストファイルを削除
+        os.remove(short_file)
+
 @patch('src.transcribe.client')
 def test_transcribe_audio_large_file(mock_client):
     """大きな音声ファイルの文字起こし機能をテストする"""
@@ -235,3 +253,23 @@ def test_process_single_file_invalid_format():
     """サポートされていない形式のファイルを指定した場合のエラーテスト"""
     with pytest.raises(ValueError):
         process_single_file("test.txt")
+
+@patch('src.transcribe.client')
+def test_process_single_file_too_short(mock_client, tmp_path):
+    """短すぎる音声ファイルを処理した場合のエラーテスト"""
+    # テスト用の短い音声ファイルを作成（50ミリ秒）
+    test_audio = create_test_audio(duration_ms=50)
+    output_dir = tmp_path / "transcripts"
+    
+    try:
+        # ValueErrorが発生することを確認
+        with pytest.raises(ValueError) as exc_info:
+            process_single_file(test_audio, str(output_dir))
+        
+        # エラーメッセージを確認
+        assert "音声ファイルが短すぎます" in str(exc_info.value)
+        assert "0.050秒" in str(exc_info.value)
+    
+    finally:
+        # テストファイルを削除
+        os.remove(test_audio)

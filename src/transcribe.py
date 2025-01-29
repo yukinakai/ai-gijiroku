@@ -49,32 +49,43 @@ def split_audio(audio_path):
     Returns:
         list: 一時ファイルのパスのリスト
     """
-    # 音声ファイルを読み込む
-    audio = AudioSegment.from_file(audio_path)
-    
-    # ファイルサイズを取得
-    file_size = os.path.getsize(audio_path)
-    
-    if file_size <= CHUNK_SIZE:
-        # ファイルサイズが20MB以下の場合は分割不要
-        return [audio_path]
-    
-    # チャンクの数を計算
-    num_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE  # 切り上げ除算
-    chunk_duration = len(audio) // num_chunks
-    chunks = []
-    
-    # 一時ディレクトリを作成
-    temp_dir = tempfile.mkdtemp()
-    
-    # 音声を分割して一時ファイルとして保存
-    for i, start in enumerate(range(0, len(audio), chunk_duration)):
-        chunk = audio[start:start + chunk_duration]
-        chunk_path = os.path.join(temp_dir, f"chunk_{i}.wav")
-        chunk.export(chunk_path, format="wav")
-        chunks.append(chunk_path)
-    
-    return chunks
+    try:
+        # 音声ファイルを読み込む
+        audio = AudioSegment.from_file(audio_path)
+        
+        # 音声の長さをチェック（ミリ秒単位）
+        duration_ms = len(audio)
+        duration_sec = duration_ms / 1000.0
+        
+        if duration_sec < 0.1:
+            raise ValueError(f"音声ファイルが短すぎます（{duration_sec:.3f}秒）。最小の長さは0.1秒です。")
+        
+        # ファイルサイズを取得
+        file_size = os.path.getsize(audio_path)
+        
+        if file_size <= CHUNK_SIZE:
+            # ファイルサイズが20MB以下の場合は分割不要
+            return [audio_path]
+        
+        # チャンクの数を計算
+        num_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE  # 切り上げ除算
+        chunk_duration = len(audio) // num_chunks
+        chunks = []
+        
+        # 一時ディレクトリを作成
+        temp_dir = tempfile.mkdtemp()
+        
+        # 音声を分割して一時ファイルとして保存
+        for i, start in enumerate(range(0, len(audio), chunk_duration)):
+            chunk = audio[start:start + chunk_duration]
+            chunk_path = os.path.join(temp_dir, f"chunk_{i}.wav")
+            chunk.export(chunk_path, format="wav")
+            chunks.append(chunk_path)
+        
+        return chunks
+    except Exception as e:
+        print(f"音声ファイルの処理中にエラーが発生しました: {str(e)}")
+        raise
 
 def get_response_data(response):
     """
