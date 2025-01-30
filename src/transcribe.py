@@ -186,13 +186,14 @@ def transcribe_audio(audio_path):
     
     return "\n".join(all_transcriptions), prompt_info
 
-def process_single_file(input_file, output_dir="src/transcripts"):
+def process_single_file(input_file, output_dir="src/transcripts", extract_todos=True):
     """
-    単一の音声ファイルを文字起こしする
+    単一の音声ファイルを文字起こしし、必要に応じてTODOを抽出する
     
     Args:
         input_file (str): 入力音声ファイルのパス
         output_dir (str): 出力ディレクトリのパス
+        extract_todos (bool): TODOを抽出するかどうか
     
     Returns:
         Path: 出力ファイルのパス
@@ -220,8 +221,17 @@ def process_single_file(input_file, output_dir="src/transcripts"):
         output_file = output_path / f"{input_path.stem}.txt"
         
         # 結果の保存（プロンプト情報を含む）
+        # 文字起こし結果を保存
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(transcription)
+            
+            # TODOの抽出と追記
+            if extract_todos:
+                from extract_todos import process_transcript
+                f.write("\n\n")
+                process_transcript(str(output_file))
+            
+            # API使用情報の追記
             f.write("\n\n")
             f.write("=" * 50)
             f.write("\n[OpenAI API 使用情報]\n")
@@ -269,12 +279,26 @@ if __name__ == "__main__":
     parser.add_argument("-f", "--file", help="文字起こしする音声ファイルのパス")
     parser.add_argument("-d", "--directory", help="文字起こしする音声ファイルのディレクトリ")
     parser.add_argument("-o", "--output", default="src/transcripts", help="出力先ディレクトリ（デフォルト: transcripts）")
+    parser.add_argument("--no-todos", action="store_true", help="TODOの抽出を無効にする")
     
     args = parser.parse_args()
     
+    # TODOの抽出を制御
+    extract_todos = not args.no_todos
+
     if args.file:
-        process_single_file(args.file, args.output)
+        process_single_file(args.file, args.output, extract_todos=extract_todos)
     elif args.directory:
         process_directory(args.directory, args.output)
+        # ディレクトリ内の各ファイルに対してTODO抽出を実行
+        if extract_todos:
+            from extract_todos import process_transcript
+            for file in Path(args.output).glob("*.txt"):
+                process_transcript(str(file))
     else:
         process_directory(output_dir=args.output)
+        # デフォルトディレクトリ内の各ファイルに対してTODO抽出を実行
+        if extract_todos:
+            from extract_todos import process_transcript
+            for file in Path(args.output).glob("*.txt"):
+                process_transcript(str(file))
