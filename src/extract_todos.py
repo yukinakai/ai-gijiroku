@@ -16,6 +16,9 @@ def split_text_into_chunks(text: str, max_tokens: int = 4000) -> List[str]:
     Returns:
         分割されたテキストのリスト
     """
+    if not text:
+        return []
+
     # 簡易的なトークン数の見積もり (日本語の場合、文字数の2倍程度)
     chars_per_token = 2
     max_chars = max_tokens * chars_per_token
@@ -27,7 +30,21 @@ def split_text_into_chunks(text: str, max_tokens: int = 4000) -> List[str]:
     current_length = 0
     
     for line in lines:
-        line_length = len(line)
+        line_length = len(line) + 1  # 改行文字も考慮
+        
+        # 現在の行が最大文字数を超える場合は、文字単位で分割
+        if line_length > max_chars:
+            if current_chunk:
+                chunks.append('\n'.join(current_chunk))
+                current_chunk = []
+                current_length = 0
+            
+            # 長い行を文字単位で分割
+            for i in range(0, len(line), max_chars):
+                chunk = line[i:i + max_chars]
+                chunks.append(chunk)
+            continue
+        
         if current_length + line_length > max_chars and current_chunk:
             chunks.append('\n'.join(current_chunk))
             current_chunk = []
