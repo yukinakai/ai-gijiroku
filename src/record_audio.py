@@ -46,7 +46,7 @@ def record_audio(filename=None, sample_rate=48000, input_device_id=None):
     指定された入力デバイスとBlackHoleを使用してオーディオを録音
     
     Parameters:
-    - filename: 保存するファイル名（指定がない場合は日時から自動生成）
+    - filename: 保存するファイル名（YYYYMMDD_[指定された名前].wav形式）
     - sample_rate: サンプリングレート（デフォルト48kHz）
     - input_device_id: 入力デバイスのID
     """
@@ -71,11 +71,19 @@ def record_audio(filename=None, sample_rate=48000, input_device_id=None):
 
     # recordingsディレクトリが存在しない場合は作成
     os.makedirs(RECORDINGS_DIR, exist_ok=True)
-    
-    if filename is None:
-        filename = f"recording_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+    # ファイル名が指定されていない場合は日付のみのファイル名を生成
+    current_date = datetime.now().strftime('%Y%m%d')
+    if filename:
+        # 拡張子が指定されていない場合は.wavを追加
+        if not filename.endswith('.wav'):
+            filename = f"{filename}.wav"
+        # 日付をプレフィックスとして追加
+        filename = f"{current_date}_{filename}"
+    else:
+        filename = f"{current_date}.wav"
     
     # ファイルパスを生成（recordingsディレクトリ内に保存）
+    filepath = os.path.join(RECORDINGS_DIR, filename)
     filepath = os.path.join(RECORDINGS_DIR, filename)
 
     print("\n録音の準備:")
@@ -189,7 +197,7 @@ def record_audio(filename=None, sample_rate=48000, input_device_id=None):
 def main():
     parser = argparse.ArgumentParser(description='オーディオ録音スクリプト')
     parser.add_argument('-f', '--filename', type=str,
-                       help='保存するファイル名')
+                       help='保存するファイル名（YYYYMMDD_[指定された名前].wav形式で保存されます）')
     parser.add_argument('-r', '--rate', type=int, default=48000,
                        help='サンプリングレート（Hz）')
     parser.add_argument('--no-transcribe', action='store_true',
@@ -209,9 +217,14 @@ def main():
             print("無効なデバイスIDです。もう一度入力してください。")
         except ValueError:
             print("数値を入力してください。")
+
+    # コマンドライン引数でファイル名が指定されていない場合、ユーザーに入力を求める
+    filename = args.filename
+    if filename is None:
+        filename = input("\n録音ファイルの名前を入力してください（拡張子.wavは自動的に追加されます）: ").strip()
     
     # 選択された入力デバイスとBlackHoleを使用して録音
-    audio_file = record_audio(args.filename, args.rate, device_id)
+    audio_file = record_audio(filename, args.rate, device_id)
     
     if audio_file and not args.no_transcribe:
         print("\n文字起こしを開始します...")
