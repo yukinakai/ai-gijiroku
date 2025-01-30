@@ -78,6 +78,7 @@ python src/transcribe.py
 - `-f, --file`: 文字起こしする音声ファイルのパス
 - `-d, --directory`: 文字起こしする音声ファイルのディレクトリ
 - `-o, --output`: 出力先ディレクトリ（デフォルト: transcripts）
+- `--no-todos`: TODOの抽出を無効にする（デフォルトでは有効）
 
 仕様:
 - 対応フォーマット: .wav, .mp3, .m4a
