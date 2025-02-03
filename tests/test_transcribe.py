@@ -3,7 +3,7 @@ import os
 import json
 import tempfile
 from pathlib import Path
-from src.transcribe import (
+from src.functions.transcribe import (
     format_timestamp,
     transcribe_audio,
     process_directory,

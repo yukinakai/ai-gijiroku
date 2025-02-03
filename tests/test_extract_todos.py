@@ -1,5 +1,5 @@
 import pytest
-from src.extract_todos import (
+from src.functions.extract_todos import (
     split_text_into_chunks,
     extract_todos_from_chunk,
     format_todos,
