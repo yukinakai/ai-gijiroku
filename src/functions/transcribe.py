@@ -227,7 +227,7 @@ def process_single_file(input_file, output_dir="src/transcripts", extract_todos=
             
             # TODOの抽出と追記
             if extract_todos:
-                from extract_todos import process_transcript
+                from src.functions.extract_todos import process_transcript
                 f.write("\n\n")
                 process_transcript(str(output_file))
             
@@ -292,13 +292,13 @@ if __name__ == "__main__":
         process_directory(args.directory, args.output)
         # ディレクトリ内の各ファイルに対してTODO抽出を実行
         if extract_todos:
-            from extract_todos import process_transcript
+            from src.functions.extract_todos import process_transcript
             for file in Path(args.output).glob("*.txt"):
                 process_transcript(str(file))
     else:
         process_directory(output_dir=args.output)
         # デフォルトディレクトリ内の各ファイルに対してTODO抽出を実行
         if extract_todos:
-            from extract_todos import process_transcript
+            from src.functions.extract_todos import process_transcript
             for file in Path(args.output).glob("*.txt"):
                 process_transcript(str(file))

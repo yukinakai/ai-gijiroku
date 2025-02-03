@@ -2,10 +2,13 @@ import unittest
 from unittest.mock import patch, MagicMock
 import numpy as np
 from datetime import datetime
-from src.record_audio import record_audio, list_devices, find_blackhole_device, MIN_RECORDING_DURATION
+from src.functions.recorder import AudioRecorder
 
-class TestRecordAudio(unittest.TestCase):
+class TestAudioRecorder(unittest.TestCase):
     def setUp(self):
+        self.recordings_dir = "test_recordings"
+        self.min_recording_duration = 0.5
+        self.recorder = AudioRecorder(self.recordings_dir, self.min_recording_duration)
         self.mock_devices = [
             {
                 'name': 'Device 1',
@@ -29,12 +32,12 @@ class TestRecordAudio(unittest.TestCase):
 
     def test_list_devices(self):
         with patch('sounddevice.query_devices', return_value=self.mock_devices):
-            devices = list_devices()
+            devices = AudioRecorder.list_devices()
             self.assertEqual(devices, self.mock_devices)
 
     def test_find_blackhole_device_found(self):
         with patch('sounddevice.query_devices', return_value=self.mock_devices):
-            idx, device = find_blackhole_device()
+            idx, device = AudioRecorder.find_blackhole_device()
             self.assertEqual(idx, 1)
             self.assertEqual(device, self.mock_devices[1])
 
@@ -48,7 +51,7 @@ class TestRecordAudio(unittest.TestCase):
             }
         ]
         with patch('sounddevice.query_devices', return_value=mock_devices):
-            idx, device = find_blackhole_device()
+            idx, device = AudioRecorder.find_blackhole_device()
             self.assertIsNone(idx)
             self.assertIsNone(device)
 
@@ -56,7 +59,7 @@ class TestRecordAudio(unittest.TestCase):
     @patch('builtins.input', return_value='')
     @patch('soundfile.write')
     @patch('time.time')
-    def test_record_audio_filename_format(self, mock_time, mock_write, mock_input, mock_input_stream):
+    def test_record_filename_format(self, mock_time, mock_write, mock_input, mock_input_stream):
         """ファイル名のフォーマットをテスト"""
         # 録音時間をモック
         mock_time.side_effect = [
@@ -93,29 +96,32 @@ class TestRecordAudio(unittest.TestCase):
         ]
 
         with patch('sounddevice.query_devices', return_value=self.mock_devices), \
-             patch('datetime.datetime') as mock_datetime:
+             patch('datetime.datetime', autospec=True) as mock_datetime:
             # 日付を固定
-            mock_datetime.now.return_value = datetime(2025, 1, 30)
+            current_date = datetime.now()
+            mock_datetime.now.return_value = current_date
             
             # カスタムファイル名でテスト
-            result = record_audio(filename="テスト会議", input_device_id=0)
+            result = self.recorder.record(filename="テスト会議", input_device_id=0)
             self.assertIsNotNone(result)
             # ファイル名が正しいフォーマットになっているか確認
-            self.assertTrue(mock_write.call_args[0][0].endswith("20250130_テスト会議.wav"))
+            expected_filename = f"{current_date.strftime('%Y%m%d')}_テスト会議.wav"
+            self.assertTrue(mock_write.call_args[0][0].endswith(expected_filename))
 
             # ファイル名なしでテスト
-            result = record_audio(input_device_id=0)
+            result = self.recorder.record(input_device_id=0)
             self.assertIsNotNone(result)
             # ファイル名が日付のみになっているか確認
-            self.assertTrue(mock_write.call_args[0][0].endswith("20250130.wav"))
+            expected_filename = f"{current_date.strftime('%Y%m%d')}.wav"
+            self.assertTrue(mock_write.call_args[0][0].endswith(expected_filename))
 
     @patch('sounddevice.InputStream')
     @patch('builtins.input', return_value='')
     @patch('soundfile.write')
     @patch('time.time')
-    def test_record_audio_with_valid_duration(self, mock_time, mock_write, mock_input, mock_input_stream):
+    def test_record_with_valid_duration(self, mock_time, mock_write, mock_input, mock_input_stream):
         # 録音時間をモック
-        mock_time.side_effect = [0, MIN_RECORDING_DURATION + 1]  # 開始時間と終了時間
+        mock_time.side_effect = [0, self.min_recording_duration + 1]  # 開始時間と終了時間
 
         # ストリームのモック設定
         mock_input_device_stream = MagicMock()
@@ -137,7 +143,7 @@ class TestRecordAudio(unittest.TestCase):
         ]
 
         with patch('sounddevice.query_devices', return_value=self.mock_devices):
-            result = record_audio(input_device_id=0)
+            result = self.recorder.record(input_device_id=0)
             
         self.assertIsNotNone(result)
         mock_write.assert_called_once()
@@ -146,9 +152,9 @@ class TestRecordAudio(unittest.TestCase):
     @patch('builtins.input', return_value='')
     @patch('soundfile.write')
     @patch('time.time')
-    def test_record_audio_with_too_short_duration(self, mock_time, mock_write, mock_input, mock_input_stream):
+    def test_record_with_too_short_duration(self, mock_time, mock_write, mock_input, mock_input_stream):
         # 録音時間をモック（最小録音時間未満）
-        mock_time.side_effect = [0, MIN_RECORDING_DURATION / 2]
+        mock_time.side_effect = [0, self.min_recording_duration / 2]
 
         # ストリームのモック設定
         mock_input_device_stream = MagicMock()
@@ -169,16 +175,16 @@ class TestRecordAudio(unittest.TestCase):
 
         with patch('sounddevice.query_devices', return_value=self.mock_devices), \
              patch('builtins.print') as mock_print:
-            result = record_audio(input_device_id=0)
+            result = self.recorder.record(input_device_id=0)
             
         self.assertIsNone(result)
         mock_write.assert_not_called()
-        mock_print.assert_any_call(f"\nエラー: 録音時間が短すぎます（{MIN_RECORDING_DURATION/2:.2f}秒）")
+        mock_print.assert_any_call(f"\nエラー: 録音時間が短すぎます（{self.min_recording_duration/2:.2f}秒）")
 
     @patch('sounddevice.InputStream')
     @patch('builtins.input', return_value='')
     @patch('soundfile.write')
-    def test_record_audio_with_empty_frames(self, mock_write, mock_input, mock_input_stream):
+    def test_record_with_empty_frames(self, mock_write, mock_input, mock_input_stream):
         # ストリームのモック設定
         mock_input_device_stream = MagicMock()
         mock_blackhole_stream = MagicMock()
@@ -190,13 +196,13 @@ class TestRecordAudio(unittest.TestCase):
 
         with patch('sounddevice.query_devices', return_value=self.mock_devices), \
              patch('builtins.print') as mock_print:
-            result = record_audio(input_device_id=0)
+            result = self.recorder.record(input_device_id=0)
             
         self.assertIsNone(result)
         mock_write.assert_not_called()
         mock_print.assert_any_call("\nエラー: 録音データが空です。")
 
-    def test_record_audio_no_blackhole(self):
+    def test_record_no_blackhole(self):
         mock_devices = [
             {
                 'name': 'Device 1',
@@ -207,86 +213,22 @@ class TestRecordAudio(unittest.TestCase):
         ]
         with patch('sounddevice.query_devices', return_value=mock_devices), \
              patch('builtins.print') as mock_print:
-            record_audio(input_device_id=0)  # 有効な入力デバイスIDを指定
+            self.recorder.record(input_device_id=0)  # 有効な入力デバイスIDを指定
             mock_print.assert_any_call("\nエラー: BlackHoleデバイスが見つかりません。")
 
-    def test_record_audio_invalid_device_id(self):
+    def test_record_invalid_device_id(self):
         """無効なデバイスIDを指定した場合のテスト"""
         with patch('sounddevice.query_devices', return_value=self.mock_devices), \
              patch('builtins.print') as mock_print:
-            record_audio(input_device_id=len(self.mock_devices))  # 存在しないインデックス
+            self.recorder.record(input_device_id=len(self.mock_devices))  # 存在しないインデックス
             mock_print.assert_any_call("\nエラー: 有効な入力デバイスIDを指定してください。")
 
-    def test_record_audio_non_input_device(self):
+    def test_record_non_input_device(self):
         """入力チャンネルがないデバイスを指定した場合のテスト"""
         with patch('sounddevice.query_devices', return_value=self.mock_devices), \
              patch('builtins.print') as mock_print:
-            record_audio(input_device_id=2)  # Device 3 (入力チャンネルなし)
+            self.recorder.record(input_device_id=2)  # Device 3 (入力チャンネルなし)
             mock_print.assert_any_call("\nエラー: デバイス 2 は入力デバイスではありません。")
-    def test_main_function_with_transcribe(self):
-        with patch('src.record_audio.list_devices') as mock_list_devices, \
-             patch('src.record_audio.record_audio') as mock_record_audio, \
-             patch('src.record_audio.process_single_file') as mock_process_single_file, \
-             patch('argparse.ArgumentParser.parse_args') as mock_args, \
-             patch('builtins.input') as mock_input:
-            
-            mock_args.return_value = MagicMock(
-                filename=None,
-                rate=48000,
-                no_transcribe=False
-            )
-            mock_list_devices.return_value = self.mock_devices
-            
-            # デバイスIDとファイル名の入力をシミュレート
-            mock_input.side_effect = ['0', 'テスト会議']
-            
-            # record_audioが音声ファイルのパスを返すように設定
-            mock_audio_path = "recordings/test_audio.wav"
-            mock_record_audio.return_value = mock_audio_path
-            
-            # process_single_fileが文字起こしファイルのパスを返すように設定
-            mock_transcript_path = "transcripts/test_audio.txt"
-            mock_process_single_file.return_value = mock_transcript_path
-            
-            from src.record_audio import main
-            main()
-            
-            # 各関数が正しく呼び出されたことを確認
-            mock_list_devices.assert_called_once()
-            mock_record_audio.assert_called_once_with('テスト会議', 48000, 0)
-            mock_process_single_file.assert_called_once_with(mock_audio_path)
-            self.assertEqual(mock_input.call_count, 2)  # デバイスIDとファイル名の2回の入力
-
-    def test_main_function_without_transcribe(self):
-        with patch('src.record_audio.list_devices') as mock_list_devices, \
-             patch('src.record_audio.record_audio') as mock_record_audio, \
-             patch('src.record_audio.process_single_file') as mock_process_single_file, \
-             patch('argparse.ArgumentParser.parse_args') as mock_args, \
-             patch('builtins.input') as mock_input:
-            
-            mock_args.return_value = MagicMock(
-                filename=None,
-                rate=48000,
-                no_transcribe=True
-            )
-            mock_list_devices.return_value = self.mock_devices
-            
-            # デバイスIDとファイル名の入力をシミュレート
-            mock_input.side_effect = ['0', 'テスト会議']
-            
-            # record_audioが音声ファイルのパスを返すように設定
-            mock_audio_path = "recordings/test_audio.wav"
-            mock_record_audio.return_value = mock_audio_path
-            
-            from src.record_audio import main
-            main()
-            
-            # 各関数が正しく呼び出されたことを確認
-            mock_list_devices.assert_called_once()
-            mock_record_audio.assert_called_once_with('テスト会議', 48000, 0)
-            # 文字起こしが呼ばれていないことを確認
-            mock_process_single_file.assert_not_called()
-            self.assertEqual(mock_input.call_count, 2)  # デバイスIDとファイル名の2回の入力
 
 if __name__ == '__main__':
     unittest.main()

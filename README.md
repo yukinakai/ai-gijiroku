@@ -24,7 +24,7 @@ OPENAI_API_KEY=your_api_key_here
 ### 1. 音声の録音
 
 ```bash
-python src/record_audio.py
+python src/main.py record
 ```
 
 録音の手順：
@@ -52,7 +52,7 @@ python src/record_audio.py
 録音完了後、デフォルトで自動的に文字起こしが実行されます。
 文字起こしをスキップする場合は、`--no-transcribe`オプションを使用してください：
 ```bash
-python src/record_audio.py --no-transcribe
+python src/main.py record --no-transcribe
 ```
 
 #### 手動文字起こし
@@ -61,17 +61,17 @@ python src/record_audio.py --no-transcribe
 
 1. 単一の音声ファイルを文字起こし
 ```bash
-python src/transcribe.py -f path/to/audio.wav
+python src/main.py transcribe -f path/to/audio.wav
 ```
 
 2. ディレクトリ内のすべての音声ファイルを文字起こし
 ```bash
-python vtranscribe.py -d path/to/directory
+python src/main.py transcribe -d path/to/directory
 ```
 
 3. デフォルトの`recordings`ディレクトリ内のファイルを文字起こし
 ```bash
-python src/transcribe.py
+python src/main.py transcribe
 ```
 
 オプション:
@@ -91,7 +91,7 @@ python src/transcribe.py
 会議の書き起こしテキストからTODOを抽出し、チェックリスト形式で追記します：
 
 ```bash
-python src/extract_todos.py path/to/transcript.txt
+python src/main.py extract-todos path/to/transcript.txt
 ```
 
 仕様:
@@ -106,4 +106,3 @@ python src/extract_todos.py path/to/transcript.txt
 テストの実行:
 ```bash
 python -m pytest tests/test_*.py -v
-```

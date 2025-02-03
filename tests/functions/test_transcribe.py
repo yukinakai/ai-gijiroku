@@ -3,7 +3,7 @@ import os
 import json
 import tempfile
 from pathlib import Path
-from src.transcribe import (
+from src.functions.transcribe import (
     format_timestamp,
     transcribe_audio,
     process_directory,
@@ -104,7 +104,7 @@ def test_split_audio():
                     os.remove(chunk_path)
             os.rmdir(temp_dir)
 
-@patch('src.transcribe.client')
+@patch('src.functions.transcribe.client')
 def test_transcribe_audio_with_mixed_chunks(mock_client):
     """短いチャンクと正常なチャンクが混在する音声ファイルの文字起こし機能をテストする"""
     # モックの設定
@@ -141,7 +141,7 @@ def test_transcribe_audio_with_mixed_chunks(mock_client):
         # テストファイルを削除
         os.remove(test_audio)
 
-@patch('src.transcribe.client')
+@patch('src.functions.transcribe.client')
 def test_transcribe_audio_all_chunks_too_short(mock_client):
     """全てのチャンクが短すぎる場合のエラーテスト"""
     # 短すぎる音声ファイルを作成（50ミリ秒）
@@ -160,7 +160,7 @@ def test_transcribe_audio_all_chunks_too_short(mock_client):
         # テストファイルを削除
         os.remove(test_audio)
 
-@patch('src.transcribe.client')
+@patch('src.functions.transcribe.client')
 def test_process_directory(mock_client, tmp_path):
     """ディレクトリ処理機能をテストする"""
     # モックの設定
@@ -188,7 +188,7 @@ def test_process_directory(mock_client, tmp_path):
     try:
         # 処理を実行
         # TODOの抽出を無効にしてテスト
-        with patch('src.transcribe.process_single_file') as mock_process_single_file:
+        with patch('src.functions.transcribe.process_single_file') as mock_process_single_file:
             mock_process_single_file.side_effect = lambda input_file, output_dir, extract_todos=True: \
                 process_single_file(input_file, output_dir, extract_todos=False)
             process_directory(str(input_dir), str(output_dir))
@@ -210,7 +210,7 @@ def test_process_directory(mock_client, tmp_path):
         # テストファイルを削除
         os.remove(test_audio)
 
-@patch('src.transcribe.client')
+@patch('src.functions.transcribe.client')
 def test_process_single_file(mock_client, tmp_path):
     """単一ファイル処理機能をテストする"""
     # モックの設定
