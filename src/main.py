@@ -22,6 +22,7 @@ def main():
         skip_transcribe=args.no_transcribe
     )
     
+    # 成功時は0、失敗時は1を返す
     return 0 if success else 1
 
 if __name__ == "__main__":

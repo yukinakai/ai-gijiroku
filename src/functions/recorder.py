@@ -5,7 +5,8 @@ import numpy as np
 import os
 import time
 import sys
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, Dict, Any
+from datetime import datetime
 
 class AudioRecorder:
     """オーディオ録音を管理するクラス"""
@@ -21,7 +22,7 @@ class AudioRecorder:
         os.makedirs(recordings_dir, exist_ok=True)
 
     @staticmethod
-    def list_devices() -> List[Dict]:
+    def list_devices() -> list[Dict[str, Any]]:
         """利用可能なオーディオデバイスを一覧表示"""
         devices = sd.query_devices()
         print("\n利用可能なオーディオデバイス:")
@@ -34,7 +35,7 @@ class AudioRecorder:
         return devices
 
     @staticmethod
-    def find_blackhole_device() -> Tuple[Optional[int], Optional[Dict]]:
+    def find_blackhole_device() -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
         """BlackHoleデバイスのインデックスを検索"""
         devices = sd.query_devices()
         for i, device in enumerate(devices):
@@ -89,8 +90,10 @@ class AudioRecorder:
             print("2. システム環境設定 > サウンド で BlackHole 2chが表示されているか確認してください。")
             return None
 
+        devices = sd.query_devices()
+        input_device = devices[input_device_id]
+
         # ファイル名の生成
-        from datetime import datetime
         current_date = datetime.now().strftime('%Y%m%d')
         if filename:
             if not filename.endswith('.wav'):
@@ -109,8 +112,6 @@ class AudioRecorder:
         print("\n上記の設定が完了したら、Enterキーを押して録音を開始してください。")
         input()
 
-        devices = sd.query_devices()
-        input_device = devices[input_device_id]
         print(f"\n使用するデバイス:")
         print(f"録音デバイス: {blackhole_device['name']}")
         print(f"保存先: {filepath}")
