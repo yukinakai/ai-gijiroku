@@ -5,6 +5,9 @@ import numpy as np
 import os
 import time
 import sys
+import select
+import termios
+import tty
 from typing import Optional, Tuple, Dict, Any
 from datetime import datetime
 
@@ -62,6 +65,13 @@ class AudioRecorder:
             return False, f"デバイス {input_device_id} は入力デバイスではありません。"
             
         return True, None
+
+    @staticmethod
+    def _is_key_pressed() -> Optional[str]:
+        """キー入力をチェック（非ブロッキング）"""
+        if select.select([sys.stdin], [], [], 0.0)[0]:
+            return sys.stdin.read(1)
+        return None
 
     def record(self, filename: Optional[str] = None, sample_rate: int = 48000, 
                input_device_id: Optional[int] = None) -> Optional[str]:
@@ -121,8 +131,12 @@ class AudioRecorder:
         
         try:
             print("\n録音を開始します...")
-            print("Ctrl+Cで録音を停止")
+            print("qキーを押して録音を停止")
             print("経過時間:")
+
+            # ターミナルの設定を変更（キー入力を即座に取得するため）
+            old_settings = termios.tcgetattr(sys.stdin)
+            tty.setcbreak(sys.stdin.fileno())
 
             input_stream = sd.InputStream(
                 device=input_device_id,
@@ -159,9 +173,18 @@ class AudioRecorder:
                 recording_duration = current_time
                 self._print_progress(current_time)
 
-        except KeyboardInterrupt:
-            print("\n録音を停止します...")
+                # qキーが押されたかチェック
+                key = self._is_key_pressed()
+                if key == 'q':
+                    print("\n録音を停止します...")
+                    break
+
+        except Exception as e:
+            print(f"\nエラー: {str(e)}")
         finally:
+            # ターミナルの設定を元に戻す
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+
             if 'input_stream' in locals():
                 input_stream.stop()
                 input_stream.close()
