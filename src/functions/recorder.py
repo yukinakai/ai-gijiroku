@@ -5,6 +5,9 @@ import numpy as np
 import os
 import time
 import sys
+import select
+import termios
+import tty
 from typing import Optional, Tuple, Dict, Any
 from datetime import datetime
 
@@ -63,6 +66,18 @@ class AudioRecorder:
             
         return True, None
 
+    @staticmethod
+    def _is_key_pressed() -> Optional[str]:
+        """キー入力をチェック（非ブロッキング）"""
+        try:
+            if select.select([sys.stdin], [], [], 0.0)[0]:
+                return sys.stdin.read(1)
+        except (select.error, IOError, AttributeError):
+            # テスト環境やリダイレクトされた標準入力の場合は
+            # _is_key_pressed_mockメソッドが使用される
+            pass
+        return None
+
     def record(self, filename: Optional[str] = None, sample_rate: int = 48000, 
                input_device_id: Optional[int] = None) -> Optional[str]:
         """
@@ -118,11 +133,20 @@ class AudioRecorder:
 
         frames = []
         recording_duration = 0
+        old_settings = None
         
         try:
             print("\n録音を開始します...")
-            print("Ctrl+Cで録音を停止")
+            print("qキーを押して録音を停止")
             print("経過時間:")
+
+            # ターミナルの設定を変更（キー入力を即座に取得するため）
+            try:
+                old_settings = termios.tcgetattr(sys.stdin)
+                tty.setcbreak(sys.stdin.fileno())
+            except (termios.error, IOError, AttributeError):
+                # テスト環境やリダイレクトされた標準入力の場合はスキップ
+                pass
 
             input_stream = sd.InputStream(
                 device=input_device_id,
@@ -159,9 +183,23 @@ class AudioRecorder:
                 recording_duration = current_time
                 self._print_progress(current_time)
 
-        except KeyboardInterrupt:
-            print("\n録音を停止します...")
+                # qキーが押されたかチェック
+                key = self._is_key_pressed()
+                if key == 'q':
+                    print("\n録音を停止します...")
+                    break
+
+        except Exception as e:
+            print(f"\nエラー: {str(e)}")
+            return None
         finally:
+            # ターミナルの設定を元に戻す
+            if old_settings is not None:
+                try:
+                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                except (termios.error, IOError):
+                    pass
+
             if 'input_stream' in locals():
                 input_stream.stop()
                 input_stream.close()
