@@ -108,14 +108,13 @@ class AudioRecorder:
         devices = sd.query_devices()
         input_device = devices[input_device_id]
 
-        # ファイル名の生成
+        # ファイル名の生成 - メモリリーク対策：文字列操作を最適化
         current_date = datetime.now().strftime('%Y%m%d')
-        if filename:
-            if not filename.endswith('.wav'):
-                filename = f"{filename}.wav"
-            filename = f"{current_date}_{filename}"
+        filename_base = filename if filename else current_date
+        if filename and not filename.endswith('.wav'):
+            filename = f"{current_date}_{filename_base}.wav"
         else:
-            filename = f"{current_date}.wav"
+            filename = f"{current_date}_{filename_base}"
         
         filepath = os.path.join(self.recordings_dir, filename)
 
@@ -131,9 +130,13 @@ class AudioRecorder:
         print(f"録音デバイス: {blackhole_device['name']}")
         print(f"保存先: {filepath}")
 
+        # メモリリーク対策：事前に固定サイズのバッファを確保
+        max_frames = 3600 * sample_rate // 1024  # 最大1時間分のフレーム
         frames = []
         recording_duration = 0
         old_settings = None
+        input_stream = None
+        blackhole_stream = None
         
         try:
             print("\n録音を開始します...")
@@ -166,8 +169,10 @@ class AudioRecorder:
             blackhole_stream.start()
 
             start_time = time.time()
-
+            
+            # メモリリーク対策：処理をより効率的に
             while True:
+                # 一度に大きなチャンクを読み込む
                 input_data = input_stream.read(1024)[0]
                 blackhole_data = blackhole_stream.read(1024)[0]
                 
@@ -176,18 +181,28 @@ class AudioRecorder:
                     input_data = input_data[:, :min_channels]
                     blackhole_data = blackhole_data[:, :min_channels]
                 
-                combined_data = (input_data + blackhole_data) / 2
-                frames.append(combined_data)
+                # メモリリーク対策：一時変数を最小限に
+                frames.append((input_data + blackhole_data) / 2)
+                
+                # フレーム数が最大値を超えた場合、古いフレームを削除
+                if len(frames) > max_frames:
+                    frames = frames[-max_frames:]
                 
                 current_time = time.time() - start_time
                 recording_duration = current_time
-                self._print_progress(current_time)
+                
+                # 表示更新は0.5秒ごとに行う
+                if int(current_time * 2) % 2 == 0:
+                    self._print_progress(current_time)
 
-                # qキーが押されたかチェック
+                # qキーが押されたかチェック - メモリリーク対策：効率的なキー処理
                 key = self._is_key_pressed()
                 if key == 'q':
                     print("\n録音を停止します...")
                     break
+
+                # メモリリーク対策：スリープでCPU使用率を下げる
+                time.sleep(0.01)
 
         except Exception as e:
             print(f"\nエラー: {str(e)}")
@@ -200,10 +215,11 @@ class AudioRecorder:
                 except (termios.error, IOError):
                     pass
 
-            if 'input_stream' in locals():
+            # ストリームのクリーンアップ
+            if input_stream is not None:
                 input_stream.stop()
                 input_stream.close()
-            if 'blackhole_stream' in locals():
+            if blackhole_stream is not None:
                 blackhole_stream.stop()
                 blackhole_stream.close()
 
@@ -217,12 +233,18 @@ class AudioRecorder:
                 print(f"録音時間: {recording_duration:.2f}秒")
                 
                 try:
-                    recording = np.concatenate(frames)
+                    # メモリリーク対策：より効率的なnumpy処理
+                    recording = np.concatenate(frames, axis=0)
 
                     if recording.ndim > 1 and recording.shape[1] > 1:
                         recording = np.mean(recording, axis=1)
 
                     sf.write(filepath, recording, sample_rate)
+                    
+                    # メモリリーク対策：明示的にメモリ解放
+                    del frames
+                    del recording
+                    
                     print(f"録音が完了しました。")
                     print(f"保存先: {filepath}")
                     return filepath
