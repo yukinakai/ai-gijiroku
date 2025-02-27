@@ -105,4 +105,4 @@ python src/main.py extract-todos path/to/transcript.txt
 
 テストの実行:
 ```bash
-python -m pytest tests/test_*.py -v
+python -m pytest tests/ -v
