@@ -73,7 +73,7 @@ python -m src.main record
 文字起こしをスキップする場合は、`--no-transcribe`オプションを使用してください：
 
 ```bash
-python -m src.main record --no-transcribe
+python -m src.main --no-transcribe
 ```
 
 #### 手動文字起こし
@@ -83,19 +83,19 @@ python -m src.main record --no-transcribe
 1. 単一の音声ファイルを文字起こし
 
 ```bash
-python -m src.main transcribe -f path/to/audio.wav
+python -m src.functions.transcribe -f path/to/audio.wav
 ```
 
 2. ディレクトリ内のすべての音声ファイルを文字起こし
 
 ```bash
-python -m src.main transcribe -d path/to/directory
+python -m src.functions.transcribe -d path/to/directory
 ```
 
 3. デフォルトの`recordings`ディレクトリ内のファイルを文字起こし
 
 ```bash
-python -m src.main transcribe
+python -m src.functions.transcribe
 ```
 
 オプション:
