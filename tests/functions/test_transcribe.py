@@ -110,11 +110,7 @@ def test_transcribe_audio_with_mixed_chunks(mock_client):
     # モックの設定
     mock_response = MagicMock()
     mock_response.model_dump_json.return_value = json.dumps({
-        "segments": [{
-            "start": 0,
-            "text": "テストテキスト"
-        }],
-        "duration": 1.0
+        "text": "テストテキスト"
     })
     mock_client.audio.transcriptions.create.return_value = mock_response
     
@@ -132,9 +128,9 @@ def test_transcribe_audio_with_mixed_chunks(mock_client):
         
         # プロンプト情報の確認
         assert isinstance(prompt_info, dict)
-        assert prompt_info["model"] == "whisper-1"
+        assert prompt_info["model"] == "gpt-4o-transcribe"
         assert prompt_info["language"] == "ja"
-        assert prompt_info["duration_seconds"] == 1.0
+        assert prompt_info["duration_seconds"] > 0
         assert "timestamp" in prompt_info
         
     finally:
@@ -166,11 +162,7 @@ def test_process_directory(mock_client, tmp_path):
     # モックの設定
     mock_response = MagicMock()
     mock_response.model_dump_json.return_value = json.dumps({
-        "segments": [{
-            "start": 0,
-            "text": "テストテキスト"
-        }],
-        "duration": 60
+        "text": "テストテキスト"
     })
     mock_client.audio.transcriptions.create.return_value = mock_response
     
@@ -195,7 +187,7 @@ def test_process_directory(mock_client, tmp_path):
             f.write("[00:00:00] テストテキスト\n\n")
             f.write("=" * 50)
             f.write("\n[OpenAI API 使用情報]\n")
-            f.write("モデル: whisper-1\n")
+            f.write("モデル: gpt-4o-transcribe\n")
             f.write("言語設定: ja\n")
             f.write("音声の長さ: 60.00秒\n")
             f.write("推定コスト: $0.0060\n")
@@ -215,7 +207,7 @@ def test_process_directory(mock_client, tmp_path):
         with open(output_files[0], "r", encoding="utf-8") as f:
             content = f.read()
             assert "[OpenAI API 使用情報]" in content
-            assert "モデル: whisper-1" in content
+            assert "モデル: gpt-4o-transcribe" in content
             assert "推定コスト: $" in content
             assert "テストテキスト" in content
     
@@ -229,11 +221,7 @@ def test_process_single_file(mock_client, tmp_path):
     # モックの設定
     mock_response = MagicMock()
     mock_response.model_dump_json.return_value = json.dumps({
-        "segments": [{
-            "start": 0,
-            "text": "テストテキスト"
-        }],
-        "duration": 60
+        "text": "テストテキスト"
     })
     mock_client.audio.transcriptions.create.return_value = mock_response
     
@@ -258,7 +246,7 @@ def test_process_single_file(mock_client, tmp_path):
             assert content.startswith("[")
             assert "テストテキスト" in content
             assert "[OpenAI API 使用情報]" in content
-            assert "モデル: whisper-1" in content
+            assert "モデル: gpt-4o-transcribe" in content
             assert "言語設定: ja" in content
             assert "音声の長さ:" in content
             assert "推定コスト: $" in content
