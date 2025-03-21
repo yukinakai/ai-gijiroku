@@ -2,6 +2,7 @@ import pytest
 import os
 import json
 import tempfile
+import re
 from pathlib import Path
 from src.functions.transcribe import (
     format_timestamp,
@@ -11,6 +12,7 @@ from src.functions.transcribe import (
     calculate_audio_cost,
     split_audio,
     get_audio_duration,
+    format_transcription_text,
     CHUNK_SIZE
 )
 from unittest.mock import patch, MagicMock
@@ -265,3 +267,20 @@ def test_process_single_file_invalid_format():
     """サポートされていない形式のファイルを指定した場合のエラーテスト"""
     with pytest.raises(ValueError):
         process_single_file("test.txt")
+
+def test_format_transcription_text():
+    """テキスト整形機能をテストする"""
+    # タイムスタンプと文章が含まれるテスト
+    input_text = "[00:01:01] これはテストです。次の文です。"
+    expected = "[00:01:01]\n これはテストです。\n次の文です。\n"
+    assert format_transcription_text(input_text) == expected
+    
+    # 複数行のテスト
+    input_text2 = "[00:00:00] 1行目。\n[00:00:10] 2行目です。3行目。"
+    expected2 = "[00:00:00]\n 1行目。\n[00:00:10]\n 2行目です。\n3行目。\n"
+    assert format_transcription_text(input_text2) == expected2
+    
+    # 既に改行がある場合のテスト
+    input_text3 = "[00:00:00] テスト。\nすでに改行あり。"
+    expected3 = "[00:00:00]\n テスト。\nすでに改行あり。\n"
+    assert format_transcription_text(input_text3) == expected3
