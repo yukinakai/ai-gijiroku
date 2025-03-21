@@ -1,22 +1,36 @@
 # AI 議事録
 
-音声を録音し、自動で文字起こしするツール
+音声を録音し、自動で文字起こしするツール。会議やインタビューの議事録作成を効率化します。
+
+## 特徴
+
+- **簡単な録音機能**: システムオーディオをキャプチャして録音
+- **高精度な文字起こし**: OpenAI Whisper API を使用
+- **時間軸付き出力**: すべての発言に対するタイムスタンプ付き
+
+## システム要件
+
+- Python 3.9 以上
+- OpenAI API キー
+- macOS 環境 (BlackHole によるオーディオルーティング)
+- 必要な Python パッケージ (requirements.txt に記載)
 
 ## セットアップ
 
-1. 必要なパッケージをインストール
+### 1. 必要なパッケージをインストール
 
 ```bash
 pip install -r requirements.txt
 ```
 
-2. BlackHole のインストール
+### 2. BlackHole のインストール
 
 - [BlackHole](https://existential.audio/blackhole/)をインストール
 - システム環境設定 > サウンドで BlackHole 2ch が表示されることを確認
 
-3. 環境変数の設定
-   `.env.example`をコピーして`.env`を作成し、OpenAI API キーを設定します：
+### 3. 環境変数の設定
+
+`.env.example`をコピーして`.env`を作成し、OpenAI API キーを設定します：
 
 ```
 OPENAI_API_KEY=your_api_key_here
@@ -27,7 +41,7 @@ OPENAI_API_KEY=your_api_key_here
 ### 1. 音声の録音
 
 ```bash
-python src/main.py record
+python -m src.main record
 ```
 
 録音の手順：
@@ -59,7 +73,7 @@ python src/main.py record
 文字起こしをスキップする場合は、`--no-transcribe`オプションを使用してください：
 
 ```bash
-python src/main.py record --no-transcribe
+python -m src.main record --no-transcribe
 ```
 
 #### 手動文字起こし
@@ -69,19 +83,19 @@ python src/main.py record --no-transcribe
 1. 単一の音声ファイルを文字起こし
 
 ```bash
-python src/main.py transcribe -f path/to/audio.wav
+python -m src.main transcribe -f path/to/audio.wav
 ```
 
 2. ディレクトリ内のすべての音声ファイルを文字起こし
 
 ```bash
-python src/main.py transcribe -d path/to/directory
+python -m src.main transcribe -d path/to/directory
 ```
 
 3. デフォルトの`recordings`ディレクトリ内のファイルを文字起こし
 
 ```bash
-python src/main.py transcribe
+python -m src.main transcribe
 ```
 
 オプション:
@@ -97,6 +111,22 @@ python src/main.py transcribe
 - 書き起こされたテキストは指定された出力ディレクトリに保存
 - フォーマット: `[HH:MM:SS] 発言内容`
 
+## プロジェクト構造
+
+```
+ai-gijiroku/
+├── src/
+│   ├── functions/       # 核となる機能
+│   │   ├── recorder.py  # 録音機能
+│   │   └── transcribe.py # 文字起こし機能
+│   ├── workflow/        # ワークフロー管理
+│   │   └── recording_workflow.py # 録音ワークフロー
+│   └── main.py          # メインエントリーポイント
+├── recordings/          # 録音ファイル保存ディレクトリ
+├── transcripts/         # 文字起こし結果保存ディレクトリ
+└── tests/               # テストコード
+```
+
 ## 開発
 
 テストの実行:
@@ -104,3 +134,21 @@ python src/main.py transcribe
 ```bash
 python -m pytest tests/ -v
 ```
+
+## トラブルシューティング
+
+### 録音でエラーが発生する場合
+
+- BlackHole が正しくインストールされていることを確認
+- オーディオ MIDI 設定で複数出力装置が正しく設定されていることを確認
+- 使用する入力デバイスに適切なアクセス権があることを確認
+
+### 文字起こしでエラーが発生する場合
+
+- OpenAI API キーが正しく設定されていることを確認
+- インターネット接続が安定していることを確認
+- サポートされている音声フォーマット(.wav, .mp3, .m4a)であることを確認
+
+## ライセンス
+
+Copyright (c) 2024 Yukinakai
