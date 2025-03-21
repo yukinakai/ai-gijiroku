@@ -125,7 +125,8 @@ def format_transcription_text(text):
     """
     文字起こしテキストを整形する
     - タイムスタンプの後に改行を挿入
-    - 「。」の後に改行を挿入
+    - 「。」「?」「？」「!」「！」の後に改行を挿入
+    - 50文字を超えた場合、最初の「、」で改行
     
     Args:
         text (str): 整形する文字起こしテキスト
@@ -139,10 +140,41 @@ def format_transcription_text(text):
     # タイムスタンプの後に改行を挿入
     text = re.sub(timestamp_pattern, r'\1\n', text)
     
-    # 「。」の後に改行を挿入（ただし、既に改行がある場合は除く）
-    text = re.sub(r'。(?!\n)', '。\n', text)
+    # テキストを行ごとに処理
+    lines = text.split('\n')
+    formatted_lines = []
     
-    return text
+    for line in lines:
+        # タイムスタンプ行はそのまま追加
+        if re.match(timestamp_pattern, line):
+            formatted_lines.append(line)
+            continue
+        
+        # 「。」「?」「？」「!」「！」の後に改行を挿入
+        punctuation_pattern = r'([。?？!！])(?!\n)'
+        line_with_newlines = re.sub(punctuation_pattern, r'\1\n', line)
+        
+        # 50文字を超えた行を処理
+        segments = line_with_newlines.split('\n')
+        processed_segments = []
+        
+        for segment in segments:
+            if len(segment) > 50 and '、' in segment[50:]:
+                # 50文字を超えた部分の「、」を見つけて改行
+                comma_index = segment.find('、', 50)
+                if comma_index != -1:
+                    processed_segments.append(segment[:comma_index+1] + '\n' + segment[comma_index+1:])
+                else:
+                    processed_segments.append(segment)
+            else:
+                processed_segments.append(segment)
+        
+        formatted_lines.append('\n'.join(processed_segments))
+    
+    # 最終的なテキストを組み立てる
+    formatted_text = '\n'.join(formatted_lines)
+    
+    return formatted_text
 
 def transcribe_audio(audio_path):
     """
