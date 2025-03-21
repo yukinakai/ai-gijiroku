@@ -7,8 +7,7 @@ def test_main_with_default_arguments():
     with patch('argparse.ArgumentParser.parse_args') as mock_args, \
          patch('src.workflow.recording_workflow.AudioRecorder') as mock_recorder, \
          patch('builtins.input') as mock_input, \
-         patch('src.workflow.recording_workflow.process_single_file') as mock_process, \
-         patch('src.workflow.recording_workflow.process_transcript') as mock_process_transcript:
+         patch('src.workflow.recording_workflow.process_single_file') as mock_process:
         # モックの設定
         mock_args.return_value = MagicMock(
             filename=None,
@@ -28,7 +27,6 @@ def test_main_with_default_arguments():
         
         # 文字起こし処理のモック設定
         mock_process.return_value = 'test_transcript.txt'
-        mock_process_transcript.return_value = None
         
         # テスト実行
         result = main()
@@ -36,8 +34,7 @@ def test_main_with_default_arguments():
         # アサーション
         assert result == 0
         mock_recorder_instance.record.assert_called_once()
-        mock_process.assert_called_once_with('test.wav', extract_todos=False)
-        mock_process_transcript.assert_called_once_with('test_transcript.txt')
+        mock_process.assert_called_once_with('test.wav')
 
 def test_main_with_custom_arguments():
     """カスタム引数でのmain関数の動作テスト"""
