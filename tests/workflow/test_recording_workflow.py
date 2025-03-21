@@ -43,13 +43,11 @@ class TestRecordingWorkflow(unittest.TestCase):
         
         with patch.object(self.workflow.recorder, 'record', return_value="test_audio.wav") as mock_record:
             with patch('src.workflow.recording_workflow.process_single_file', return_value="test_transcript.txt") as mock_transcribe:
-                with patch('src.workflow.recording_workflow.process_transcript') as mock_process_transcript:
-                    result = self.workflow.execute()
-                    
-                    self.assertTrue(result)
-                    mock_record.assert_called_once()
-                    mock_transcribe.assert_called_once()
-                    mock_process_transcript.assert_called_once()
+                result = self.workflow.execute()
+                
+                self.assertTrue(result)
+                mock_record.assert_called_once()
+                mock_transcribe.assert_called_once()
 
     @patch.object(RecordingWorkflow, 'select_input_device')
     def test_execute_device_selection_cancelled(self, mock_select_input_device):
@@ -79,18 +77,6 @@ class TestRecordingWorkflow(unittest.TestCase):
         with patch.object(self.workflow.recorder, 'record', return_value="test_audio.wav"):
             result = self.workflow.execute(skip_transcribe=True)
             self.assertTrue(result)
-
-    @patch.object(RecordingWorkflow, 'select_input_device')
-    @patch.object(RecordingWorkflow, 'get_filename')
-    def test_execute_without_todo_extraction(self, mock_get_filename, mock_select_input_device):
-        # TODO抽出を行わない場合のテスト
-        mock_select_input_device.return_value = 1
-        mock_get_filename.return_value = "test_file"
-        
-        with patch.object(self.workflow.recorder, 'record', return_value="test_audio.wav"):
-            with patch('src.workflow.recording_workflow.process_single_file', return_value="test_transcript.txt"):
-                result = self.workflow.execute(extract_todos=False)
-                self.assertTrue(result)
 
 if __name__ == '__main__':
     unittest.main()

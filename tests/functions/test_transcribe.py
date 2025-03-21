@@ -187,10 +187,8 @@ def test_process_directory(mock_client, tmp_path):
     
     try:
         # 処理を実行
-        # TODOの抽出を無効にしてテスト
         with patch('src.functions.transcribe.process_single_file') as mock_process_single_file:
-            mock_process_single_file.side_effect = lambda input_file, output_dir, extract_todos=True: \
-                process_single_file(input_file, output_dir, extract_todos=False)
+            mock_process_single_file.return_value = output_dir / "test.txt"
             process_directory(str(input_dir), str(output_dir))
         
         # 出力を確認
@@ -232,7 +230,7 @@ def test_process_single_file(mock_client, tmp_path):
     
     try:
         # 処理を実行
-        output_file = process_single_file(test_audio, str(output_dir), extract_todos=False)
+        output_file = process_single_file(test_audio, str(output_dir))
         
         # 出力を確認
         assert output_dir.exists()

@@ -3,7 +3,6 @@ import os
 from typing import Optional
 from src.functions.recorder import AudioRecorder
 from src.functions.transcribe import process_single_file
-from src.functions.extract_todos import process_transcript
 
 class RecordingWorkflow:
     """録音から文字起こしまでのワークフローを管理するクラス"""
@@ -66,15 +65,14 @@ class RecordingWorkflow:
         return filename
 
     def execute(self, filename: Optional[str] = None, sample_rate: int = 48000,
-                skip_transcribe: bool = False, extract_todos: bool = True) -> bool:
+                skip_transcribe: bool = False) -> bool:
         """
-        録音から文字起こし、TODO抽出までのワークフローを実行
+        録音から文字起こしまでのワークフローを実行
         
         Parameters:
         - filename: 保存するファイル名（オプション）
         - sample_rate: サンプリングレート
         - skip_transcribe: 文字起こしをスキップするかどうか
-        - extract_todos: TODOを抽出するかどうか
         
         Returns:
         - bool: ワークフローが正常に完了したかどうか
@@ -106,24 +104,12 @@ class RecordingWorkflow:
         if not skip_transcribe:
             print("\n文字起こしを開始します...")
             try:
-                output_file = process_single_file(audio_file, extract_todos=False)
+                output_file = process_single_file(audio_file)
                 print(f"文字起こしが完了しました。")
                 print(f"出力ファイル: {output_file}")
                 
                 # メモリリーク対策：文字起こし完了後にガベージコレクション
                 gc.collect()
-                
-                if extract_todos:
-                    print("\nTODOの抽出を開始します...")
-                    try:
-                        process_transcript(output_file)
-                        print("TODOの抽出が完了しました。")
-                        
-                        # メモリリーク対策：TODO抽出完了後にガベージコレクション
-                        gc.collect()
-                    except Exception as e:
-                        print(f"TODO抽出中にエラーが発生しました: {str(e)}")
-                        return False
                 
             except Exception as e:
                 print(f"文字起こし中にエラーが発生しました: {str(e)}")
