@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 from pydub import AudioSegment
 import tempfile
+import re
 
 # .envファイルから環境変数を読み込む
 load_dotenv()
@@ -120,6 +121,29 @@ def get_response_data(response):
             # 解析できない場合は空の辞書を返す
             return {"text": ""}
 
+def format_transcription_text(text):
+    """
+    文字起こしテキストを整形する
+    - タイムスタンプの後に改行を挿入
+    - 「。」の後に改行を挿入
+    
+    Args:
+        text (str): 整形する文字起こしテキスト
+    
+    Returns:
+        str: 整形後のテキスト
+    """
+    # タイムスタンプパターン
+    timestamp_pattern = r'(\[\d{2}:\d{2}:\d{2}\])'
+    
+    # タイムスタンプの後に改行を挿入
+    text = re.sub(timestamp_pattern, r'\1\n', text)
+    
+    # 「。」の後に改行を挿入（ただし、既に改行がある場合は除く）
+    text = re.sub(r'。(?!\n)', '。\n', text)
+    
+    return text
+
 def transcribe_audio(audio_path):
     """
     音声ファイルを文字起こしする
@@ -180,6 +204,12 @@ def transcribe_audio(audio_path):
     if not valid_chunks:
         raise ValueError("処理可能な音声チャンクがありません。全てのチャンクが0.1秒未満です。")
     
+    # 全てのテキストを結合
+    raw_text = "\n".join(all_transcriptions)
+    
+    # テキストを整形
+    formatted_text = format_transcription_text(raw_text)
+    
     # APIの使用情報を作成
     cost = calculate_audio_cost(total_duration)
     prompt_info = {
@@ -190,7 +220,7 @@ def transcribe_audio(audio_path):
         "timestamp": datetime.now().isoformat()
     }
     
-    return "\n".join(all_transcriptions), prompt_info
+    return formatted_text, prompt_info
 
 def process_single_file(input_file, output_dir="src/transcripts"):
     """
