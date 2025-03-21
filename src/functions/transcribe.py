@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 from pydub import AudioSegment
 import tempfile
+import re
 
 # .envファイルから環境変数を読み込む
 load_dotenv()
@@ -107,14 +108,73 @@ def get_response_data(response):
         # 辞書形式の場合
         return response
     else:
-        # その他の場合（属性としてアクセス）
-        return {
-            'segments': [{
-                'start': segment.start,
-                'text': segment.text
-            } for segment in response.segments],
-            'duration': response.duration
-        }
+        # その他の場合（テキスト形式など）
+        try:
+            if hasattr(response, 'text'):
+                return {"text": response.text}
+            elif isinstance(response, str):
+                return {"text": response}
+            else:
+                # 最後の手段としてJSON文字列として解析
+                return json.loads(str(response))
+        except:
+            # 解析できない場合は空の辞書を返す
+            return {"text": ""}
+
+def format_transcription_text(text):
+    """
+    文字起こしテキストを整形する
+    - タイムスタンプの後に改行を挿入
+    - 「。」「?」「？」「!」「！」の後に改行を挿入
+    - 50文字を超えた場合、最初の「、」で改行
+    
+    Args:
+        text (str): 整形する文字起こしテキスト
+    
+    Returns:
+        str: 整形後のテキスト
+    """
+    # タイムスタンプパターン
+    timestamp_pattern = r'(\[\d{2}:\d{2}:\d{2}\])'
+    
+    # タイムスタンプの後に改行を挿入
+    text = re.sub(timestamp_pattern, r'\1\n', text)
+    
+    # テキストを行ごとに処理
+    lines = text.split('\n')
+    formatted_lines = []
+    
+    for line in lines:
+        # タイムスタンプ行はそのまま追加
+        if re.match(timestamp_pattern, line):
+            formatted_lines.append(line)
+            continue
+        
+        # 「。」「?」「？」「!」「！」の後に改行を挿入
+        punctuation_pattern = r'([。?？!！])(?!\n)'
+        line_with_newlines = re.sub(punctuation_pattern, r'\1\n', line)
+        
+        # 50文字を超えた行を処理
+        segments = line_with_newlines.split('\n')
+        processed_segments = []
+        
+        for segment in segments:
+            if len(segment) > 50 and '、' in segment[50:]:
+                # 50文字を超えた部分の「、」を見つけて改行
+                comma_index = segment.find('、', 50)
+                if comma_index != -1:
+                    processed_segments.append(segment[:comma_index+1] + '\n' + segment[comma_index+1:])
+                else:
+                    processed_segments.append(segment)
+            else:
+                processed_segments.append(segment)
+        
+        formatted_lines.append('\n'.join(processed_segments))
+    
+    # 最終的なテキストを組み立てる
+    formatted_text = '\n'.join(formatted_lines)
+    
+    return formatted_text
 
 def transcribe_audio(audio_path):
     """
@@ -139,23 +199,25 @@ def transcribe_audio(audio_path):
             with open(chunk_path, "rb") as audio_file:
                 # OpenAI APIを使用して文字起こし
                 response = client.audio.transcriptions.create(
-                    model="whisper-1",
+                    model="gpt-4o-transcribe",
                     file=audio_file,
                     language="ja",
-                    response_format="verbose_json"
+                    response_format="json"
                 )
                 
                 # レスポンスデータを取得
                 response_data = get_response_data(response)
                 
-                # 結果を整形
-                for segment in response_data['segments']:
-                    timestamp = format_timestamp(segment['start'] + total_duration)
-                    text = segment['text'].strip()
-                    all_transcriptions.append(f"{timestamp} {text}")
+                # jsonデータから文字起こし結果を取得
+                text = response_data.get('text', '').strip()
                 
-                # チャンクの長さを合計に追加
-                total_duration += response_data['duration']
+                # タイムスタンプは現在のチャンクの開始時間から計算
+                timestamp = format_timestamp(total_duration)
+                all_transcriptions.append(f"{timestamp} {text}")
+                
+                # チャンクの長さを推定（正確なセグメント情報がないため）
+                # 実際の音声長を使用
+                total_duration += chunk_duration
                 valid_chunks = True
                 
         except Exception as e:
@@ -174,17 +236,23 @@ def transcribe_audio(audio_path):
     if not valid_chunks:
         raise ValueError("処理可能な音声チャンクがありません。全てのチャンクが0.1秒未満です。")
     
+    # 全てのテキストを結合
+    raw_text = "\n".join(all_transcriptions)
+    
+    # テキストを整形
+    formatted_text = format_transcription_text(raw_text)
+    
     # APIの使用情報を作成
     cost = calculate_audio_cost(total_duration)
     prompt_info = {
-        "model": "whisper-1",
+        "model": "gpt-4o-transcribe",
         "language": "ja",
         "duration_seconds": total_duration,
         "cost_usd": cost,
         "timestamp": datetime.now().isoformat()
     }
     
-    return "\n".join(all_transcriptions), prompt_info
+    return formatted_text, prompt_info
 
 def process_single_file(input_file, output_dir="src/transcripts"):
     """

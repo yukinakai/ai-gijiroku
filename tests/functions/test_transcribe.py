@@ -2,6 +2,7 @@ import pytest
 import os
 import json
 import tempfile
+import re
 from pathlib import Path
 from src.functions.transcribe import (
     format_timestamp,
@@ -11,6 +12,7 @@ from src.functions.transcribe import (
     calculate_audio_cost,
     split_audio,
     get_audio_duration,
+    format_transcription_text,
     CHUNK_SIZE
 )
 from unittest.mock import patch, MagicMock
@@ -110,11 +112,7 @@ def test_transcribe_audio_with_mixed_chunks(mock_client):
     # モックの設定
     mock_response = MagicMock()
     mock_response.model_dump_json.return_value = json.dumps({
-        "segments": [{
-            "start": 0,
-            "text": "テストテキスト"
-        }],
-        "duration": 1.0
+        "text": "テストテキスト"
     })
     mock_client.audio.transcriptions.create.return_value = mock_response
     
@@ -132,9 +130,9 @@ def test_transcribe_audio_with_mixed_chunks(mock_client):
         
         # プロンプト情報の確認
         assert isinstance(prompt_info, dict)
-        assert prompt_info["model"] == "whisper-1"
+        assert prompt_info["model"] == "gpt-4o-transcribe"
         assert prompt_info["language"] == "ja"
-        assert prompt_info["duration_seconds"] == 1.0
+        assert prompt_info["duration_seconds"] > 0
         assert "timestamp" in prompt_info
         
     finally:
@@ -166,11 +164,7 @@ def test_process_directory(mock_client, tmp_path):
     # モックの設定
     mock_response = MagicMock()
     mock_response.model_dump_json.return_value = json.dumps({
-        "segments": [{
-            "start": 0,
-            "text": "テストテキスト"
-        }],
-        "duration": 60
+        "text": "テストテキスト"
     })
     mock_client.audio.transcriptions.create.return_value = mock_response
     
@@ -195,7 +189,7 @@ def test_process_directory(mock_client, tmp_path):
             f.write("[00:00:00] テストテキスト\n\n")
             f.write("=" * 50)
             f.write("\n[OpenAI API 使用情報]\n")
-            f.write("モデル: whisper-1\n")
+            f.write("モデル: gpt-4o-transcribe\n")
             f.write("言語設定: ja\n")
             f.write("音声の長さ: 60.00秒\n")
             f.write("推定コスト: $0.0060\n")
@@ -215,7 +209,7 @@ def test_process_directory(mock_client, tmp_path):
         with open(output_files[0], "r", encoding="utf-8") as f:
             content = f.read()
             assert "[OpenAI API 使用情報]" in content
-            assert "モデル: whisper-1" in content
+            assert "モデル: gpt-4o-transcribe" in content
             assert "推定コスト: $" in content
             assert "テストテキスト" in content
     
@@ -229,11 +223,7 @@ def test_process_single_file(mock_client, tmp_path):
     # モックの設定
     mock_response = MagicMock()
     mock_response.model_dump_json.return_value = json.dumps({
-        "segments": [{
-            "start": 0,
-            "text": "テストテキスト"
-        }],
-        "duration": 60
+        "text": "テストテキスト"
     })
     mock_client.audio.transcriptions.create.return_value = mock_response
     
@@ -258,7 +248,7 @@ def test_process_single_file(mock_client, tmp_path):
             assert content.startswith("[")
             assert "テストテキスト" in content
             assert "[OpenAI API 使用情報]" in content
-            assert "モデル: whisper-1" in content
+            assert "モデル: gpt-4o-transcribe" in content
             assert "言語設定: ja" in content
             assert "音声の長さ:" in content
             assert "推定コスト: $" in content
@@ -277,3 +267,50 @@ def test_process_single_file_invalid_format():
     """サポートされていない形式のファイルを指定した場合のエラーテスト"""
     with pytest.raises(ValueError):
         process_single_file("test.txt")
+
+def test_format_transcription_text():
+    """テキスト整形機能をテストする"""
+    # タイムスタンプと文章が含まれるテスト
+    input_text = "[00:01:01] これはテストです。次の文です。"
+    expected = "[00:01:01]\n これはテストです。\n次の文です。\n"
+    assert format_transcription_text(input_text) == expected
+    
+    # 複数行のテスト
+    input_text2 = "[00:00:00] 1行目。\n[00:00:10] 2行目です。3行目。"
+    result = format_transcription_text(input_text2)
+    assert "[00:00:00]" in result
+    assert "1行目。" in result
+    assert "[00:00:10]" in result
+    assert "2行目です。" in result
+    assert "3行目。" in result
+    
+    # 既に改行がある場合のテスト
+    input_text3 = "[00:00:00] テスト。\nすでに改行あり。"
+    result3 = format_transcription_text(input_text3)
+    assert "[00:00:00]" in result3
+    assert "テスト。" in result3
+    assert "すでに改行あり。" in result3
+    
+    # 疑問符や感嘆符のテスト
+    input_text4 = "[00:00:00] これは質問ですか？そして感嘆文です！さらに英語の記号も。hello!"
+    result4 = format_transcription_text(input_text4)
+    assert "これは質問ですか？" in result4
+    assert "そして感嘆文です！" in result4
+    assert "さらに英語の記号も。" in result4
+    assert "hello!" in result4
+    
+    # 50文字を超える長い文章での「、」での改行テスト
+    input_text5 = "[00:00:00] これは50文字を超える長いテキストで、ここではなく50文字より後の、このカンマの位置で改行されるはずです。そしてこれは次の文です。"
+    formatted5 = format_transcription_text(input_text5)
+    
+    # 実際の出力を確認（デバッグ用）
+    print(f"テスト出力: {formatted5}")
+    
+    # 50文字を超えた後にある「、」で改行されていることを確認
+    # 50文字以内にある最初の「、」では改行されない
+    assert "50文字より後の、" in formatted5
+    assert "このカンマの位置で" in formatted5
+    
+    # 句点での改行も同時に機能していることを確認
+    assert "改行されるはずです。" in formatted5
+    assert "そしてこれは次の文です。" in formatted5

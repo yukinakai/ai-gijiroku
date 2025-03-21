@@ -73,7 +73,7 @@ python -m src.main record
 文字起こしをスキップする場合は、`--no-transcribe`オプションを使用してください：
 
 ```bash
-python -m src.main record --no-transcribe
+python -m src.main --no-transcribe
 ```
 
 #### 手動文字起こし
@@ -83,19 +83,19 @@ python -m src.main record --no-transcribe
 1. 単一の音声ファイルを文字起こし
 
 ```bash
-python -m src.main transcribe -f path/to/audio.wav
+python -m src.functions.transcribe -f path/to/audio.wav
 ```
 
 2. ディレクトリ内のすべての音声ファイルを文字起こし
 
 ```bash
-python -m src.main transcribe -d path/to/directory
+python -m src.functions.transcribe -d path/to/directory
 ```
 
 3. デフォルトの`recordings`ディレクトリ内のファイルを文字起こし
 
 ```bash
-python -m src.main transcribe
+python -m src.functions.transcribe
 ```
 
 オプション:
@@ -107,9 +107,19 @@ python -m src.main transcribe
 仕様:
 
 - 対応フォーマット: .wav, .mp3, .m4a
-- OpenAI Whisper API を使用して高精度な文字起こし
+- OpenAI の最新モデル「gpt-4o-transcribe」を使用した高精度な文字起こし
+- 音声の長さに応じて自動的にチャンク分割処理を行い、大きいファイルも処理可能
 - 書き起こされたテキストは指定された出力ディレクトリに保存
 - フォーマット: `[HH:MM:SS] 発言内容`
+- API コスト情報も出力ファイルに含まれます
+
+### 使用しているモデルについて
+
+このアプリケーションは OpenAI の「gpt-4o-transcribe」モデルを使用しています。このモデルは以下の特徴があります：
+
+- 高精度な日本語文字起こし能力
+- 応答形式は「json」または「text」のみをサポート（以前の「verbose_json」はサポート外）
+- 正確なタイムスタンプ機能は現在このモデルでは利用できないため、音声チャンクごとにタイムスタンプを付与する簡易方式を採用しています
 
 ## プロジェクト構造
 
