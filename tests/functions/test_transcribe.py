@@ -186,9 +186,24 @@ def test_process_directory(mock_client, tmp_path):
     shutil.copy(test_audio, test_audio_path)
     
     try:
+        # 出力ディレクトリを作成
+        output_dir.mkdir(exist_ok=True)
+        
+        # テスト用の出力ファイルを作成
+        output_file = output_dir / "test.txt"
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write("[00:00:00] テストテキスト\n\n")
+            f.write("=" * 50)
+            f.write("\n[OpenAI API 使用情報]\n")
+            f.write("モデル: whisper-1\n")
+            f.write("言語設定: ja\n")
+            f.write("音声の長さ: 60.00秒\n")
+            f.write("推定コスト: $0.0060\n")
+            f.write("処理日時: 2023-01-01T00:00:00\n")
+        
         # 処理を実行
         with patch('src.functions.transcribe.process_single_file') as mock_process_single_file:
-            mock_process_single_file.return_value = output_dir / "test.txt"
+            mock_process_single_file.return_value = output_file
             process_directory(str(input_dir), str(output_dir))
         
         # 出力を確認
