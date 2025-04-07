@@ -57,6 +57,10 @@ with chat_col:
 with transcript_col:
     st.title("リアルタイム文字起こし")
     
+    # 更新ボタン
+    if st.button("文字起こしを更新"):
+        update_transcript()
+    
     # 文字起こし内容を表示するためのコンテナ
     transcript_container = st.empty()
     
@@ -68,11 +72,6 @@ with transcript_col:
     
     # 初期表示
     update_transcript()
-    
-    # 自動更新の制御
-    auto_update = st.checkbox("自動更新を有効にする", value=True)
-    if auto_update:
-        st.rerun()
 
 # サイドバー: 設定
 with st.sidebar:
