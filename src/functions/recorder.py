@@ -298,7 +298,7 @@ class AudioRecorder:
         filepath = os.path.join(self.recordings_dir, filename)
         
         # リアルタイム文字起こし用の出力ファイル - 常に固定のファイル名で保存
-        transcription_dir = os.path.join(os.path.dirname(os.path.dirname(self.recordings_dir)), 'transcripts')
+        transcription_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'transcripts')
         realtime_filepath = os.path.join(transcription_dir, "realtime.txt")
         
         # 最終的な文字起こしファイル名（録音終了後にリネーム）
