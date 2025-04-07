@@ -59,19 +59,11 @@ with transcript_col:
     
     # 更新ボタン
     if st.button("文字起こしを更新"):
-        update_transcript()
+        st.rerun()
     
-    # 文字起こし内容を表示するためのコンテナ
-    transcript_container = st.empty()
-    
-    # 文字起こしの更新
-    def update_transcript():
-        transcript_text = read_transcript()
-        # 改行を保持したまま表示
-        transcript_container.markdown(transcript_text, unsafe_allow_html=True)
-    
-    # 初期表示
-    update_transcript()
+    # 文字起こし内容を表示
+    transcript_text = read_transcript()
+    st.markdown(transcript_text, unsafe_allow_html=True)
 
 # サイドバー: 設定
 with st.sidebar:
