@@ -297,10 +297,13 @@ class AudioRecorder:
         
         filepath = os.path.join(self.recordings_dir, filename)
         
-        # リアルタイム文字起こし用の出力ファイル
+        # リアルタイム文字起こし用の出力ファイル - 常に固定のファイル名で保存
         transcription_dir = os.path.join(os.path.dirname(os.path.dirname(self.recordings_dir)), 'transcripts')
-        transcription_filename = f"{current_date}_{filename_base}_realtime.txt"
-        transcription_filepath = os.path.join(transcription_dir, transcription_filename)
+        realtime_filepath = os.path.join(transcription_dir, "realtime.txt")
+        
+        # 最終的な文字起こしファイル名（録音終了後にリネーム）
+        final_transcription_filename = f"{current_date}_{filename_base}.txt"
+        final_transcription_filepath = os.path.join(transcription_dir, final_transcription_filename)
         
         print("\n録音の準備:")
         print("1. システム環境設定 > サウンド > 出力 で録音したいデバイスを選択")
@@ -313,10 +316,11 @@ class AudioRecorder:
         print(f"\n使用するデバイス:")
         print(f"録音デバイス: {blackhole_device['name']}")
         print(f"保存先: {filepath}")
-        print(f"リアルタイム文字起こし結果: {transcription_filepath}")
+        print(f"リアルタイム文字起こし結果: {realtime_filepath}")
+        print(f"（録音終了後のファイル名: {final_transcription_filepath}）")
 
         # リアルタイム文字起こしインスタンスの初期化
-        transcriber = RealtimeTranscriber(transcription_filepath, chunk_duration=10.0)
+        transcriber = RealtimeTranscriber(realtime_filepath, chunk_duration=10.0)
         transcriber.start()
 
         # メモリリーク対策：事前に固定サイズのバッファを確保
@@ -428,6 +432,16 @@ class AudioRecorder:
             
             # リアルタイム文字起こしを停止して結果を取得
             transcriber.stop()
+            
+            # 文字起こしファイルをリネーム
+            try:
+                if os.path.exists(realtime_filepath):
+                    if os.path.exists(final_transcription_filepath):
+                        os.remove(final_transcription_filepath)  # 既存ファイルがある場合は削除
+                    os.rename(realtime_filepath, final_transcription_filepath)
+                    print(f"文字起こし結果をリネームしました: {final_transcription_filepath}")
+            except Exception as e:
+                print(f"文字起こしファイルのリネーム中にエラーが発生しました: {str(e)}")
             
             return filepath
             

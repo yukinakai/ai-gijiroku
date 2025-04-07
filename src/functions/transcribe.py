@@ -348,6 +348,15 @@ class RealtimeTranscriber:
         # 出力ファイルの準備
         output_dir = os.path.dirname(output_file)
         os.makedirs(output_dir, exist_ok=True)
+        
+        # ファイルが既に存在する場合は削除（常に新しく開始）
+        if os.path.exists(output_file):
+            try:
+                os.remove(output_file)
+            except Exception as e:
+                print(f"警告: 既存のリアルタイム文字起こしファイルを削除できませんでした: {str(e)}")
+        
+        # 新しいファイルを作成
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write("# リアルタイム文字起こし\n\n")
     
