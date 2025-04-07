@@ -65,7 +65,7 @@ class RecordingWorkflow:
         return filename
 
     def execute(self, filename: Optional[str] = None, sample_rate: int = 48000,
-                skip_transcribe: bool = False) -> bool:
+                skip_transcribe: bool = False, realtime_transcribe: bool = False) -> bool:
         """
         録音から文字起こしまでのワークフローを実行
         
@@ -73,6 +73,7 @@ class RecordingWorkflow:
         - filename: 保存するファイル名（オプション）
         - sample_rate: サンプリングレート
         - skip_transcribe: 文字起こしをスキップするかどうか
+        - realtime_transcribe: リアルタイム文字起こしを有効にするかどうか
         
         Returns:
         - bool: ワークフローが正常に完了したかどうか
@@ -92,10 +93,20 @@ class RecordingWorkflow:
         # メモリリーク対策：各ステップの間でガベージコレクションを実行
         gc.collect()
         
-        # 録音の実行
-        audio_file = self.recorder.record(filename, sample_rate, device_id)
-        if not audio_file:
-            return False
+        # 録音の実行（リアルタイム文字起こしが有効な場合はそちらのメソッドを使用）
+        if realtime_transcribe:
+            audio_file = self.recorder.record_realtime(filename, sample_rate, device_id)
+            if not audio_file:
+                return False
+                
+            # リアルタイム文字起こしは録音中に自動的に行われるため、
+            # 録音後の文字起こし処理はスキップする
+            skip_transcribe = True
+        else:
+            # 通常の録音を実行
+            audio_file = self.recorder.record(filename, sample_rate, device_id)
+            if not audio_file:
+                return False
         
         # メモリリーク対策：録音完了後にガベージコレクション
         gc.collect()
