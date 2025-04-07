@@ -50,7 +50,7 @@ class ChatManager:
         try:
             # OpenAI APIを使用して応答を生成
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=messages,
                 temperature=0.7,
                 max_tokens=1000
