@@ -28,7 +28,7 @@ class ChatManager:
     
     def get_transcript(self) -> str:
         """最新の文字起こしを取得"""
-        transcript_path = Path("src/transcripts/20250407_test.txt")
+        transcript_path = Path("src/transcripts/realtime.txt")
         if transcript_path.exists():
             with open(transcript_path, "r", encoding="utf-8") as f:
                 content = f.read()
