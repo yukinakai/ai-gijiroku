@@ -28,11 +28,11 @@ def read_transcript():
             return content.replace("\n", "\n\n")
     return "文字起こしファイルが見つかりません。"
 
-# 2カラムレイアウトの作成
-chat_col, transcript_col = st.columns([1, 1])
+# タブの作成
+tab1, tab2 = st.tabs(["AI議事録アシスタント", "リアルタイム文字起こし"])
 
-# 左パネル: チャットUI
-with chat_col:
+# タブ1: チャットUI
+with tab1:
     st.title("AI議事録アシスタント")
     
     # チャット履歴の表示
@@ -53,8 +53,8 @@ with chat_col:
             st.markdown(response)
         st.session_state.messages.append({"role": "assistant", "content": response})
 
-# 右パネル: 文字起こし表示
-with transcript_col:
+# タブ2: 文字起こし表示
+with tab2:
     st.title("リアルタイム文字起こし")
     
     # 更新ボタン
@@ -68,6 +68,8 @@ with transcript_col:
 # サイドバー: 設定
 with st.sidebar:
     st.title("設定")
+    
+    # チャット履歴のクリア
     if st.button("チャット履歴をクリア"):
         st.session_state.messages = []
         st.rerun() 
