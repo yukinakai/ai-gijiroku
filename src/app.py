@@ -20,7 +20,7 @@ if "messages" not in st.session_state:
 
 def read_transcript():
     """文字起こしファイルを読み込む"""
-    transcript_path = Path("src/transcripts/20250407_test.txt")
+    transcript_path = Path("src/transcripts/realtime.txt")
     if transcript_path.exists():
         with open(transcript_path, "r", encoding="utf-8") as f:
             content = f.read()
