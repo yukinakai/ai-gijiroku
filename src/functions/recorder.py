@@ -10,6 +10,7 @@ import termios
 import tty
 from typing import Optional, Tuple, Dict, Any
 from datetime import datetime
+from src.functions.transcribe import RealtimeTranscriber
 
 class AudioRecorder:
     """オーディオ録音を管理するクラス"""
@@ -255,3 +256,197 @@ class AudioRecorder:
             else:
                 print("\nエラー: 録音データが空です。")
                 return None
+
+    def record_realtime(self, filename: Optional[str] = None, sample_rate: int = 48000, 
+                        input_device_id: Optional[int] = None) -> Optional[str]:
+        """
+        リアルタイム文字起こし機能付きで録音
+        
+        Parameters:
+        - filename: 保存するファイル名（YYYYMMDD_[指定された名前].wav形式）
+        - sample_rate: サンプリングレート（デフォルト48kHz）
+        - input_device_id: 入力デバイスのID
+        
+        Returns:
+        - Optional[str]: 録音ファイルのパス。エラー時はNone
+        """
+        # 入力デバイスの検証
+        is_valid, error_message = self.validate_input_device(input_device_id)
+        if not is_valid:
+            print(f"\nエラー: {error_message}")
+            return None
+
+        # BlackHoleデバイスを検索
+        blackhole_idx, blackhole_device = self.find_blackhole_device()
+        if blackhole_idx is None:
+            print("\nエラー: BlackHoleデバイスが見つかりません。")
+            print("1. BlackHoleがインストールされているか確認してください。")
+            print("2. システム環境設定 > サウンド で BlackHole 2chが表示されているか確認してください。")
+            return None
+
+        devices = sd.query_devices()
+        input_device = devices[input_device_id]
+
+        # ファイル名の生成
+        current_date = datetime.now().strftime('%Y%m%d')
+        filename_base = filename if filename else current_date
+        if filename and not filename.endswith('.wav'):
+            filename = f"{current_date}_{filename_base}.wav"
+        else:
+            filename = f"{current_date}_{filename_base}"
+        
+        filepath = os.path.join(self.recordings_dir, filename)
+        
+        # リアルタイム文字起こし用の出力ファイル
+        transcription_dir = os.path.join(os.path.dirname(os.path.dirname(self.recordings_dir)), 'transcripts')
+        transcription_filename = f"{current_date}_{filename_base}_realtime.txt"
+        transcription_filepath = os.path.join(transcription_dir, transcription_filename)
+        
+        print("\n録音の準備:")
+        print("1. システム環境設定 > サウンド > 出力 で録音したいデバイスを選択")
+        print("2. オーディオMIDI設定を開き、複数出力装置を作成")
+        print("3. 複数出力装置に、録音したいデバイスとBlackHole 2chの両方を追加")
+        print("4. システム環境設定 > サウンド > 出力 で作成した複数出力装置を選択")
+        print("\n上記の設定が完了したら、Enterキーを押して録音を開始してください。")
+        input()
+
+        print(f"\n使用するデバイス:")
+        print(f"録音デバイス: {blackhole_device['name']}")
+        print(f"保存先: {filepath}")
+        print(f"リアルタイム文字起こし結果: {transcription_filepath}")
+
+        # リアルタイム文字起こしインスタンスの初期化
+        transcriber = RealtimeTranscriber(transcription_filepath, chunk_duration=10.0)
+        transcriber.start()
+
+        # メモリリーク対策：事前に固定サイズのバッファを確保
+        frames = []
+        recording_duration = 0
+        old_settings = None
+        input_stream = None
+        blackhole_stream = None
+        
+        try:
+            print("\n録音を開始します...")
+            print("qキーを押して録音を停止")
+            print("経過時間:")
+
+            # ターミナルの設定を変更（キー入力を即座に取得するため）
+            try:
+                old_settings = termios.tcgetattr(sys.stdin)
+                tty.setcbreak(sys.stdin.fileno())
+            except (termios.error, IOError, AttributeError):
+                # テスト環境やリダイレクトされた標準入力の場合はスキップ
+                pass
+
+            input_stream = sd.InputStream(
+                device=input_device_id,
+                channels=input_device['max_input_channels'],
+                samplerate=sample_rate,
+                callback=None
+            )
+            
+            blackhole_stream = sd.InputStream(
+                device=blackhole_idx,
+                channels=blackhole_device['max_input_channels'],
+                samplerate=sample_rate,
+                callback=None
+            )
+
+            input_stream.start()
+            blackhole_stream.start()
+
+            start_time = time.time()
+            chunk_size = 1024  # 一度に読み込むフレームのサイズ
+            realtime_chunk = []  # リアルタイム文字起こし用のチャンク
+            realtime_samples = 0  # リアルタイム処理用のサンプル数カウンタ
+            last_transcribe_time = start_time  # 最後に文字起こしを実行した時間
+            
+            while True:
+                # 一度に大きなチャンクを読み込む
+                input_data = input_stream.read(chunk_size)[0]
+                blackhole_data = blackhole_stream.read(chunk_size)[0]
+                
+                if input_data.shape[1] != blackhole_data.shape[1]:
+                    min_channels = min(input_data.shape[1], blackhole_data.shape[1])
+                    input_data = input_data[:, :min_channels]
+                    blackhole_data = blackhole_data[:, :min_channels]
+                
+                # 録音データをバッファに追加
+                mixed_data = (input_data + blackhole_data) / 2
+                frames.append(mixed_data)
+                
+                # リアルタイム文字起こし用のバッファにも追加
+                realtime_chunk.append(mixed_data)
+                realtime_samples += len(mixed_data)
+                
+                # 一定量（5秒分）のデータが貯まったらリアルタイム文字起こしを実行
+                current_time = time.time()
+                chunk_duration_sec = realtime_samples / sample_rate
+                time_since_last_transcribe = current_time - last_transcribe_time
+                
+                if chunk_duration_sec >= 5.0 and time_since_last_transcribe >= 5.0:
+                    # チャンクを結合してリアルタイム文字起こしに送信
+                    if realtime_chunk:
+                        combined_chunk = np.concatenate(realtime_chunk, axis=0)
+                        transcriber.add_audio(combined_chunk)
+                        realtime_chunk = []
+                        realtime_samples = 0
+                        last_transcribe_time = current_time
+                
+                current_time = time.time() - start_time
+                recording_duration = current_time
+                
+                # 表示更新は0.5秒ごとに行う
+                if int(current_time * 2) % 2 == 0:
+                    self._print_progress(current_time)
+
+                # qキーが押されたかチェック
+                key = self._is_key_pressed()
+                if key == 'q':
+                    break
+                    
+            # 録音の終了処理
+            print("\n\n録音を停止しました。ファイルに保存中...")
+            
+            # 録音が最小録音時間より短い場合はスキップ
+            if recording_duration < self.min_recording_duration:
+                print(f"録音時間が短すぎます（{recording_duration:.2f}秒 < {self.min_recording_duration}秒）。ファイルは保存されません。")
+                return None
+            
+            # NumPy配列を結合し、ファイルに保存
+            data = np.concatenate(frames, axis=0)
+            sf.write(filepath, data, sample_rate)
+            
+            print(f"録音完了: {filepath}")
+            print(f"録音時間: {recording_duration:.2f}秒")
+            
+            # 残りの音声データをリアルタイム文字起こしに送信
+            if realtime_chunk:
+                combined_chunk = np.concatenate(realtime_chunk, axis=0)
+                transcriber.add_audio(combined_chunk)
+            
+            # リアルタイム文字起こしを停止して結果を取得
+            transcriber.stop()
+            
+            return filepath
+            
+        except Exception as e:
+            print(f"\nエラーが発生しました: {str(e)}")
+            return None
+            
+        finally:
+            # ストリームのクリーンアップ
+            if input_stream:
+                input_stream.stop()
+                input_stream.close()
+            if blackhole_stream:
+                blackhole_stream.stop()
+                blackhole_stream.close()
+                
+            # ターミナルの設定を元に戻す
+            if old_settings:
+                try:
+                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                except (termios.error, IOError):
+                    pass
