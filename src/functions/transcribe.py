@@ -10,9 +10,6 @@ import tempfile
 import numpy as np
 import soundfile as sf
 import threading
-import time
-from typing import Dict, Any, List, Optional, Tuple, Union
-import wave
 from pyannote.audio import Pipeline
 
 # .envファイルから環境変数を読み込む
