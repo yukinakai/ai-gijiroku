@@ -10,7 +10,6 @@ import tempfile
 import numpy as np
 import soundfile as sf
 import threading
-import time
 from pyannote.audio import Pipeline
 
 # .envファイルから環境変数を読み込む
@@ -31,7 +30,7 @@ client = OpenAI()
 try:
     diarization_pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization-3.1",
-        use_auth_token=os.getenv("HF_TOKEN")
+        use_auth_token=os.getenv("HUGGINGFACE_TOKEN")
     )
 except Exception as e:
     print(f"警告: pyannote.audioの初期化に失敗しました: {str(e)}")
