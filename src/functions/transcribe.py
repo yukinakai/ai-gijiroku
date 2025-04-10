@@ -20,8 +20,8 @@ if not os.getenv("OPENAI_API_KEY"):
     raise ValueError("環境変数 OPENAI_API_KEY が設定されていません。.envファイルを確認してください。")
 
 # pyannote.audioのアクセストークンの確認
-if not os.getenv("HF_TOKEN"):
-    raise ValueError("環境変数 HF_TOKEN が設定されていません。.envファイルを確認してください。")
+if not os.getenv("HUGGINGFACE_TOKEN"):
+    raise ValueError("環境変数 HUGGINGFACE_TOKEN が設定されていません。.envファイルを確認してください。")
 
 # OpenAIクライアントの初期化
 client = OpenAI()
