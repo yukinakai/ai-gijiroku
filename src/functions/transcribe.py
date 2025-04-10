@@ -232,13 +232,98 @@ def process_single_file(input_file, output_dir="src/transcripts"):
         raise FileNotFoundError(f"ファイルが見つかりません: {input_file}")
     
     try:
-        # 文字起こしの実行
-        transcription, prompt_info = transcribe_audio(str(input_path))
-        
         # 出力ファイル名の設定
         output_file = output_path / f"{input_path.stem}.txt"
         
-        # 結果の保存（プロンプト情報を含む）
+        # 話者判定を使用した文字起こしを試みる
+        if diarization_pipeline is not None:
+            try:
+                print("話者判定を使用した文字起こしを実行中...")
+                # 話者判定の実行
+                diarization = diarization_pipeline(str(input_path))
+                
+                # 話者ごとのセグメントに分割して文字起こし
+                all_segments = []
+                total_duration = 0
+                
+                # 話者判定結果を保存
+                with open(output_file, "w", encoding="utf-8") as f:
+                    for turn, _, speaker in diarization.itertracks(yield_label=True):
+                        # セグメントの開始時間と終了時間を取得
+                        start_time = turn.start
+                        end_time = turn.end
+                        segment_duration = end_time - start_time
+                        
+                        # 対象の音声部分を抽出して一時ファイルに保存
+                        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+                            temp_path = temp_file.name
+                        
+                        try:
+                            # pydubを使って対象セグメントを抽出
+                            audio = AudioSegment.from_file(str(input_path))
+                            segment_audio = audio[int(start_time * 1000):int(end_time * 1000)]
+                            
+                            # セグメントが短すぎる場合はスキップ
+                            if len(segment_audio) < 100:  # 100ms未満はスキップ
+                                continue
+                                
+                            segment_audio.export(temp_path, format="wav")
+                            
+                            # 文字起こし実行
+                            with open(temp_path, "rb") as audio_file:
+                                response = client.audio.transcriptions.create(
+                                    model="whisper-1",
+                                    file=audio_file,
+                                    language="ja",
+                                    response_format="verbose_json"
+                                )
+                                
+                                # レスポンスデータを取得
+                                response_data = get_response_data(response)
+                                
+                                # 時刻とテキストの組み合わせを作成
+                                if response_data['segments']:
+                                    timestamp = format_timestamp(start_time)
+                                    text = f"【話者 {speaker}】 " + " ".join([segment['text'].strip() for segment in response_data['segments']])
+                                    if text.strip():
+                                        f.write(f"{timestamp} {text}\n")
+                                        all_segments.append((start_time, f"{timestamp} {text}"))
+                            
+                            # 合計時間を更新
+                            total_duration += segment_duration
+                            
+                        except Exception as e:
+                            print(f"セグメント処理中にエラーが発生しました: {str(e)}")
+                            
+                        finally:
+                            # 一時ファイルを削除
+                            if os.path.exists(temp_path):
+                                os.remove(temp_path)
+                                
+                    # API使用情報の追記
+                    f.write("\n\n")
+                    f.write("=" * 50)
+                    f.write("\n[OpenAI API 使用情報]\n")
+                    f.write(f"モデル: whisper-1\n")
+                    f.write(f"言語設定: ja\n")
+                    f.write(f"音声の長さ: {total_duration:.2f}秒\n")
+                    f.write(f"推定コスト: ${calculate_audio_cost(total_duration):.4f}\n")
+                    f.write(f"処理日時: {datetime.now().isoformat()}\n")
+                
+                print(f"文字起こし完了: {input_path.name} -> {output_file.name}")
+                print(f"音声の長さ: {total_duration:.2f}秒")
+                print(f"推定コスト: ${calculate_audio_cost(total_duration):.4f}")
+                
+                return output_file
+                
+            except Exception as e:
+                print(f"話者判定を使用した文字起こしに失敗しました。通常の文字起こしを実行します: {str(e)}")
+                # 話者判定が失敗したら通常の文字起こしにフォールバック
+        
+        # 通常の文字起こしを実行
+        print("通常の文字起こしを実行中...")
+        transcription, prompt_info = transcribe_audio(str(input_path))
+        
         # 文字起こし結果を保存
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(transcription)
