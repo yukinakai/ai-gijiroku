@@ -11,6 +11,8 @@ import numpy as np
 import soundfile as sf
 import threading
 import time
+from typing import Dict, Any, List, Optional, Tuple, Union
+import wave
 
 # .envファイルから環境変数を読み込む
 load_dotenv()
@@ -448,6 +450,228 @@ class RealtimeTranscriber:
         print(f"推定コスト: ${calculate_audio_cost(self.total_duration):.4f}")
         
         return self.output_file
+
+class SpeakerDiarization:
+    """話者判定を行うクラス"""
+    
+    def __init__(self, access_token=None, min_speech_duration=1.0):
+        """
+        Parameters:
+        - access_token: HuggingFaceのアクセストークン（デフォルトはNone、環境変数から取得）
+        - min_speech_duration: 最小発話時間（秒）。これより短い発話は無視される
+        """
+        self.min_speech_duration = min_speech_duration
+        self.pipeline = None
+        self.token = access_token
+        
+        # HuggingFace対応の初期化
+        try:
+            self.pipeline = Pipeline.from_pretrained(
+                "pyannote/speaker-diarization@2.1",
+                use_auth_token=self.token
+            )
+            print("話者判定パイプラインを初期化しました")
+        except Exception as e:
+            print(f"話者判定パイプラインの初期化に失敗しました: {e}")
+            print("HuggingFaceのトークンを取得して環境変数に設定してください。")
+            print("https://huggingface.co/pyannote/speaker-diarization から取得できます。")
+    
+    def process_audio(self, audio_data, sample_rate=48000):
+        """
+        音声データを処理して話者判定結果を返す
+        
+        Parameters:
+        - audio_data: numpy.ndarray形式の音声データ
+        - sample_rate: サンプリングレート
+        
+        Returns:
+        - segments: [(start, end, speaker)] の形式の話者判定結果リスト
+        """
+        if self.pipeline is None:
+            print("話者判定パイプラインが初期化されていません")
+            return []
+        
+        # 一時ファイルに保存して処理
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+            temp_path = temp_file.name
+        
+        try:
+            # NumPy配列をWAVファイルとして保存
+            sf.write(temp_path, audio_data, sample_rate)
+            
+            # 話者判定を実行
+            diarization = self.pipeline(temp_path)
+            
+            # 結果を処理
+            segments = []
+            for turn, _, speaker in diarization.itertracks(yield_label=True):
+                # 最小発話時間よりも短い発話は無視
+                if turn.end - turn.start < self.min_speech_duration:
+                    continue
+                
+                segments.append((turn.start, turn.end, speaker))
+            
+            return segments
+            
+        except Exception as e:
+            print(f"話者判定処理中にエラーが発生しました: {e}")
+            return []
+            
+        finally:
+            # 一時ファイルを削除
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+    
+    def get_speaker_segments(self, audio_data, sample_rate=48000):
+        """
+        音声データから話者ごとのセグメントを抽出
+        
+        Parameters:
+        - audio_data: numpy.ndarray形式の音声データ
+        - sample_rate: サンプリングレート
+        
+        Returns:
+        - speaker_segments: 各話者ごとの音声セグメントのリスト
+        [
+            {
+                'speaker': 'SPEAKER_00',
+                'start': 0.0,
+                'end': 2.5,
+                'audio': numpy array
+            },
+            ...
+        ]
+        """
+        segments = self.process_audio(audio_data, sample_rate)
+        
+        if not segments:
+            return []
+        
+        speaker_segments = []
+        for start, end, speaker in segments:
+            # 時間をサンプル数に変換
+            start_sample = int(start * sample_rate)
+            end_sample = int(end * sample_rate)
+            
+            # 範囲チェック
+            if end_sample > len(audio_data):
+                end_sample = len(audio_data)
+            
+            if start_sample >= end_sample:
+                continue
+                
+            # その区間の音声を抽出
+            segment_audio = audio_data[start_sample:end_sample]
+            
+            speaker_segments.append({
+                'speaker': speaker,
+                'start': start,
+                'end': end,
+                'audio': segment_audio
+            })
+            
+        return speaker_segments
+
+def transcribe_speaker_segments(speaker_segments, sample_rate=48000):
+    """
+    話者ごとのセグメントを文字起こしする
+    
+    Parameters:
+    - speaker_segments: get_speaker_segments関数で得られた話者セグメントのリスト
+    - sample_rate: サンプリングレート
+    
+    Returns:
+    - transcribed_segments: 文字起こし結果を含む話者セグメントのリスト
+    [
+        {
+            'speaker': 'SPEAKER_00',
+            'start': 0.0,
+            'end': 2.5,
+            'text': '文字起こし結果'
+        },
+        ...
+    ]
+    """
+    transcribed_segments = []
+    
+    for segment in speaker_segments:
+        # セグメントの音声データを取得
+        audio_data = segment['audio']
+        
+        # 一時ファイルに保存して処理
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+            temp_path = temp_file.name
+        
+        try:
+            # NumPy配列をWAVファイルとして保存
+            sf.write(temp_path, audio_data, sample_rate)
+            
+            # 文字起こしを実行
+            with open(temp_path, "rb") as audio_file:
+                response = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    language="ja",
+                    response_format="verbose_json"
+                )
+                
+                # レスポンスデータを取得
+                response_data = get_response_data(response)
+                
+                # 文字起こし結果を取得（シンプルなテキスト）
+                text = response_data['text'].strip()
+                
+                # 新しいセグメント情報を作成（音声データは含めない）
+                transcribed_segment = {
+                    'speaker': segment['speaker'],
+                    'start': segment['start'],
+                    'end': segment['end'],
+                    'text': text
+                }
+                
+                transcribed_segments.append(transcribed_segment)
+        
+        except Exception as e:
+            print(f"セグメントの文字起こし中にエラーが発生しました: {e}")
+            # エラーが発生した場合も、空のテキストで情報を保持
+            transcribed_segment = {
+                'speaker': segment['speaker'],
+                'start': segment['start'],
+                'end': segment['end'],
+                'text': ""
+            }
+            transcribed_segments.append(transcribed_segment)
+            
+        finally:
+            # 一時ファイルを削除
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+    
+    return transcribed_segments
+
+def generate_transcript_from_segments(transcribed_segments):
+    """
+    文字起こしされたセグメントから整形された文字起こしテキストを生成
+    
+    Parameters:
+    - transcribed_segments: transcribe_speaker_segments関数の結果
+    
+    Returns:
+    - transcript: 整形された文字起こしテキスト
+    """
+    lines = []
+    
+    for segment in transcribed_segments:
+        # タイムスタンプを整形
+        timestamp = format_timestamp(segment['start'])
+        speaker = segment['speaker']
+        text = segment['text']
+        
+        if text:  # 空のテキストは除外
+            line = f"[{timestamp}] [{speaker}] {text}"
+            lines.append(line)
+    
+    return "\n".join(lines)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="音声ファイルの文字起こしを行います")

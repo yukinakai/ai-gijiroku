@@ -8,9 +8,9 @@ import sys
 import select
 import termios
 import tty
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any, List, Union
 from datetime import datetime
-from src.functions.transcribe import RealtimeTranscriber
+from src.functions.transcribe import RealtimeTranscriber, SpeakerDiarization, transcribe_speaker_segments, generate_transcript_from_segments, calculate_audio_cost
 
 class AudioRecorder:
     """オーディオ録音を管理するクラス"""
@@ -258,55 +258,73 @@ class AudioRecorder:
                 return None
 
     def record_realtime(self, filename: Optional[str] = None, sample_rate: int = 48000, 
-                        input_device_id: Optional[int] = None) -> Optional[str]:
+                    input_device_id: Optional[int] = None) -> Optional[str]:
         """
-        リアルタイム文字起こし機能付きで録音
+        リアルタイム文字起こし付きで録音を行う
+        新機能: 話者判定を使用したリアルタイム文字起こし
         
         Parameters:
-        - filename: 保存するファイル名（YYYYMMDD_[指定された名前].wav形式）
-        - sample_rate: サンプリングレート（デフォルト48kHz）
-        - input_device_id: 入力デバイスのID
+        - filename: 録音ファイル名（デフォルトは日時から自動生成）
+        - sample_rate: サンプリングレート（デフォルトは48000Hz）
+        - input_device_id: 入力デバイスID（デフォルトはNone、ユーザーから入力を求める）
         
         Returns:
-        - Optional[str]: 録音ファイルのパス。エラー時はNone
+        - filepath: 録音ファイルのパス、エラーが発生した場合はNone
         """
+        # 入力デバイスの選択または確認
+        if input_device_id is None:
+            print("\n利用可能なオーディオデバイス:")
+            devices = self.list_devices()
+            for idx, device in enumerate(devices):
+                print(f"{idx}: {device['name']} (入力: {device['max_input_channels']}ch, 出力: {device['max_output_channels']}ch)")
+            
+            try:
+                input_device_id = int(input("使用する入力デバイスの番号を入力してください: "))
+                if input_device_id < 0 or input_device_id >= len(devices):
+                    print("無効なデバイス番号です。")
+                    return None
+            except ValueError:
+                print("数値を入力してください。")
+                return None
+        
         # 入力デバイスの検証
         is_valid, error_message = self.validate_input_device(input_device_id)
         if not is_valid:
-            print(f"\nエラー: {error_message}")
+            print(f"エラー: {error_message}")
             return None
-
-        # BlackHoleデバイスを検索
+        
+        # BlackHoleデバイスの検索
         blackhole_idx, blackhole_device = self.find_blackhole_device()
         if blackhole_idx is None:
-            print("\nエラー: BlackHoleデバイスが見つかりません。")
-            print("1. BlackHoleがインストールされているか確認してください。")
-            print("2. システム環境設定 > サウンド で BlackHole 2chが表示されているか確認してください。")
+            print("BlackHole 2chデバイスが見つかりませんでした。インストールしてください。")
             return None
-
-        devices = sd.query_devices()
+        
+        # すべてのデバイス一覧を取得
+        devices = self.list_devices()
         input_device = devices[input_device_id]
-
-        # ファイル名の生成
-        current_date = datetime.now().strftime('%Y%m%d')
-        filename_base = filename if filename else current_date
-        if filename and not filename.endswith('.wav'):
-            filename = f"{current_date}_{filename_base}.wav"
-        else:
-            filename = f"{current_date}_{filename_base}"
         
+        # 録音ファイル名の設定
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        if filename is None:
+            filename = f"{timestamp}_audio.wav"
+        elif not filename.endswith('.wav'):
+            filename = f"{filename}.wav"
+        
+        # ファイルパスを作成
         filepath = os.path.join(self.recordings_dir, filename)
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
         
-        # リアルタイム文字起こし用の出力ファイル - 常に固定のファイル名で保存
-        transcription_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'transcripts')
+        # 文字起こしファイルパスの設定
+        transcription_dir = "src/transcripts"
+        os.makedirs(transcription_dir, exist_ok=True)
+        
         realtime_filepath = os.path.join(transcription_dir, "realtime.txt")
+        transcript_basename = filename.replace('.wav', '.txt')
+        final_transcription_filepath = os.path.join(transcription_dir, transcript_basename)
         
-        # 最終的な文字起こしファイル名（録音終了後にリネーム）
-        final_transcription_filename = f"{current_date}_{filename_base}.txt"
-        final_transcription_filepath = os.path.join(transcription_dir, final_transcription_filename)
-        
+        # 録音設定の説明
         print("\n録音の準備:")
-        print("1. システム環境設定 > サウンド > 出力 で録音したいデバイスを選択")
+        print("1. システム環境設定 > サウンド > 出力 でBlackHole 2chを選択")
         print("2. オーディオMIDI設定を開き、複数出力装置を作成")
         print("3. 複数出力装置に、録音したいデバイスとBlackHole 2chの両方を追加")
         print("4. システム環境設定 > サウンド > 出力 で作成した複数出力装置を選択")
@@ -319,10 +337,13 @@ class AudioRecorder:
         print(f"リアルタイム文字起こし結果: {realtime_filepath}")
         print(f"（録音終了後のファイル名: {final_transcription_filepath}）")
 
-        # リアルタイム文字起こしインスタンスの初期化
-        transcriber = RealtimeTranscriber(realtime_filepath, chunk_duration=10.0)
-        transcriber.start()
-
+        # リアルタイム文字起こしファイルの初期化
+        with open(realtime_filepath, 'w', encoding='utf-8') as f:
+            f.write("# リアルタイム文字起こし（話者判定付き）\n\n")
+            
+        # 話者判定モジュールの初期化
+        diarization = SpeakerDiarization()
+            
         # メモリリーク対策：事前に固定サイズのバッファを確保
         frames = []
         recording_duration = 0
@@ -362,9 +383,13 @@ class AudioRecorder:
 
             start_time = time.time()
             chunk_size = 1024  # 一度に読み込むフレームのサイズ
-            realtime_chunk = []  # リアルタイム文字起こし用のチャンク
-            realtime_samples = 0  # リアルタイム処理用のサンプル数カウンタ
-            last_transcribe_time = start_time  # 最後に文字起こしを実行した時間
+            speaker_buffer = []  # 話者判定用のバッファ
+            speaker_samples = 0  # 話者判定用のサンプル数カウンタ
+            last_speaker_time = start_time  # 最後に話者判定を実行した時間
+            last_speaker = None  # 最後に検出された話者
+            
+            # 音声データのバッファ（話者ごとに分けて保存）
+            current_speaker_audio = []
             
             while True:
                 # 一度に大きなチャンクを読み込む
@@ -380,23 +405,39 @@ class AudioRecorder:
                 mixed_data = (input_data + blackhole_data) / 2
                 frames.append(mixed_data)
                 
-                # リアルタイム文字起こし用のバッファにも追加
-                realtime_chunk.append(mixed_data)
-                realtime_samples += len(mixed_data)
+                # 話者判定用のバッファにも追加
+                speaker_buffer.append(mixed_data)
+                speaker_samples += len(mixed_data)
                 
-                # 一定量（5秒分）のデータが貯まったらリアルタイム文字起こしを実行
+                # 一定量（10秒分）のデータが貯まったら話者判定を実行
                 current_time = time.time()
-                chunk_duration_sec = realtime_samples / sample_rate
-                time_since_last_transcribe = current_time - last_transcribe_time
+                buffer_duration_sec = speaker_samples / sample_rate
+                time_since_last_process = current_time - last_speaker_time
                 
-                if chunk_duration_sec >= 5.0 and time_since_last_transcribe >= 5.0:
-                    # チャンクを結合してリアルタイム文字起こしに送信
-                    if realtime_chunk:
-                        combined_chunk = np.concatenate(realtime_chunk, axis=0)
-                        transcriber.add_audio(combined_chunk)
-                        realtime_chunk = []
-                        realtime_samples = 0
-                        last_transcribe_time = current_time
+                if buffer_duration_sec >= 10.0 and time_since_last_process >= 5.0:
+                    # 十分なデータが貯まっていれば話者判定を実行
+                    combined_buffer = np.concatenate(speaker_buffer, axis=0)
+                    
+                    # 現在のバッファ内で話者判定
+                    speaker_segments = diarization.get_speaker_segments(combined_buffer, sample_rate)
+                    
+                    if speaker_segments:
+                        # 話者が検出された場合、セグメントごとに文字起こし
+                        transcribed_segments = transcribe_speaker_segments(speaker_segments, sample_rate)
+                        
+                        # 文字起こし結果をファイルに追記
+                        transcript_text = generate_transcript_from_segments(transcribed_segments)
+                        if transcript_text:
+                            with open(realtime_filepath, 'a', encoding='utf-8') as f:
+                                f.write(f"{transcript_text}\n\n")
+                            
+                            # コンソールに進捗表示
+                            print(f"\n新しい文字起こし結果を追加しました（{len(transcribed_segments)}セグメント）")
+                    
+                    # バッファをリセット
+                    speaker_buffer = []
+                    speaker_samples = 0
+                    last_speaker_time = current_time
                 
                 current_time = time.time() - start_time
                 recording_duration = current_time
@@ -425,13 +466,29 @@ class AudioRecorder:
             print(f"録音完了: {filepath}")
             print(f"録音時間: {recording_duration:.2f}秒")
             
-            # 残りの音声データをリアルタイム文字起こしに送信
-            if realtime_chunk:
-                combined_chunk = np.concatenate(realtime_chunk, axis=0)
-                transcriber.add_audio(combined_chunk)
+            # 残りの音声データを処理
+            if speaker_buffer:
+                combined_buffer = np.concatenate(speaker_buffer, axis=0)
+                speaker_segments = diarization.get_speaker_segments(combined_buffer, sample_rate)
+                
+                if speaker_segments:
+                    transcribed_segments = transcribe_speaker_segments(speaker_segments, sample_rate)
+                    transcript_text = generate_transcript_from_segments(transcribed_segments)
+                    
+                    if transcript_text:
+                        with open(realtime_filepath, 'a', encoding='utf-8') as f:
+                            f.write(f"{transcript_text}\n\n")
             
-            # リアルタイム文字起こしを停止して結果を取得
-            transcriber.stop()
+            # 最終的な統計情報を追記
+            with open(realtime_filepath, 'a', encoding='utf-8') as f:
+                f.write("\n\n")
+                f.write("=" * 50)
+                f.write("\n[OpenAI API 使用情報]\n")
+                f.write(f"モデル: whisper-1\n")
+                f.write(f"言語設定: ja\n")
+                f.write(f"音声の長さ: {recording_duration:.2f}秒\n")
+                f.write(f"推定コスト: ${calculate_audio_cost(recording_duration):.4f}\n")
+                f.write(f"処理日時: {datetime.now().isoformat()}\n")
             
             # 文字起こしファイルをリネーム
             try:
