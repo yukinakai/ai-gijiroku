@@ -6,3 +6,7 @@ sounddevice
 soundfile
 numpy
 pydub
+pyannote.audio>=3.3.0
+torch>=2.6.0
+torchaudio>=2.2.0
+PyYAML>=6.0.0

@@ -462,7 +462,9 @@ class SpeakerDiarization:
         """
         self.min_speech_duration = min_speech_duration
         self.pipeline = None
-        self.token = access_token
+        
+        # 環境変数からトークンを取得（引数で指定されていない場合）
+        self.token = access_token or os.getenv("HUGGINGFACE_TOKEN")
         
         # HuggingFace対応の初期化
         try:
