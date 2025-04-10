@@ -11,6 +11,7 @@ import numpy as np
 import soundfile as sf
 import threading
 import time
+from pyannote.audio import Pipeline
 
 # .envファイルから環境変数を読み込む
 load_dotenv()
@@ -19,8 +20,23 @@ load_dotenv()
 if not os.getenv("OPENAI_API_KEY"):
     raise ValueError("環境変数 OPENAI_API_KEY が設定されていません。.envファイルを確認してください。")
 
+# pyannote.audioのアクセストークンの確認
+if not os.getenv("HF_TOKEN"):
+    raise ValueError("環境変数 HF_TOKEN が設定されていません。.envファイルを確認してください。")
+
 # OpenAIクライアントの初期化
 client = OpenAI()
+
+# pyannote.audio パイプラインの初期化
+try:
+    diarization_pipeline = Pipeline.from_pretrained(
+        "pyannote/speaker-diarization-3.1",
+        use_auth_token=os.getenv("HF_TOKEN")
+    )
+except Exception as e:
+    print(f"警告: pyannote.audioの初期化に失敗しました: {str(e)}")
+    print("話者判定機能なしで続行します。")
+    diarization_pipeline = None
 
 # チャンクサイズを20MBに設定（バイト単位）
 CHUNK_SIZE = 20 * 1024 * 1024
@@ -344,6 +360,11 @@ class RealtimeTranscriber:
         self.processing = False
         self.thread = None
         self.should_stop = False
+        self.current_speaker = None
+        self.speaker_buffer = []
+        self.speaker_start_time = 0
+        self.total_samples = 0
+        self.sample_rate = 48000  # サンプリングレート
         
         # 出力ファイルの準備
         output_dir = os.path.dirname(output_file)
@@ -369,9 +390,13 @@ class RealtimeTranscriber:
         """
         with self.lock:
             self.audio_buffer.append(audio_chunk)
+            self.speaker_buffer.append(audio_chunk)
+            self.total_samples += len(audio_chunk)
             
             # バッファが十分なサイズになったら処理を開始
-            buffer_duration = len(self.audio_buffer) * (len(audio_chunk) / 48000)
+            buffer_duration = self.total_samples / self.sample_rate
+            
+            # 話者判定と文字起こしのバッファが十分なサイズになったら処理を開始
             if buffer_duration >= self.chunk_duration and not self.processing:
                 self._process_buffer()
     
@@ -380,12 +405,12 @@ class RealtimeTranscriber:
         self.processing = True
         
         # 処理用のスレッドを開始
-        self.thread = threading.Thread(target=self._transcribe_buffer)
+        self.thread = threading.Thread(target=self._diarize_and_transcribe)
         self.thread.daemon = True
         self.thread.start()
     
-    def _transcribe_buffer(self):
-        """バッファ内の音声を文字起こし"""
+    def _diarize_and_transcribe(self):
+        """バッファ内の音声を話者判定して文字起こし"""
         try:
             with self.lock:
                 # バッファの音声を結合
@@ -395,19 +420,115 @@ class RealtimeTranscriber:
                     
                 audio_data = np.concatenate(self.audio_buffer, axis=0)
                 self.audio_buffer = []
+                self.total_samples = 0
+                
+                # 話者判定用のバッファも結合
+                speaker_audio = np.concatenate(self.speaker_buffer, axis=0)
+                self.speaker_buffer = []
             
-            # 文字起こし実行
-            result, duration = transcribe_realtime_chunk(audio_data)
-            if result:
-                # 結果をファイルに追記
-                with open(self.output_file, 'a', encoding='utf-8') as f:
-                    f.write(f"{result}\n")
+            # 一時ファイルに保存して話者判定を実行
+            if diarization_pipeline is not None:
+                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+                    temp_path = temp_file.name
                 
-                # 合計時間を更新
-                self.total_duration += duration
+                try:
+                    # 音声データを一時ファイルに保存
+                    sf.write(temp_path, speaker_audio, self.sample_rate)
+                    
+                    # 話者判定の実行
+                    diarization = diarization_pipeline(temp_path)
+                    
+                    # 話者ごとのセグメントに分割して文字起こし
+                    segments = []
+                    for turn, _, speaker in diarization.itertracks(yield_label=True):
+                        # セグメントの開始時間と終了時間を取得
+                        start_time = turn.start
+                        end_time = turn.end
+                        
+                        # 該当部分の音声を抽出
+                        start_sample = int(start_time * self.sample_rate)
+                        end_sample = int(end_time * self.sample_rate)
+                        
+                        # 範囲チェック
+                        if start_sample >= len(speaker_audio) or end_sample > len(speaker_audio):
+                            continue
+                            
+                        segment_audio = speaker_audio[start_sample:end_sample]
+                        
+                        # セグメントが短すぎる場合はスキップ
+                        if len(segment_audio) < 0.1 * self.sample_rate:
+                            continue
+                        
+                        # 文字起こし実行
+                        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as segment_file:
+                            segment_path = segment_file.name
+                        
+                        try:
+                            sf.write(segment_path, segment_audio, self.sample_rate)
+                            
+                            with open(segment_path, "rb") as audio_file:
+                                # OpenAI APIを使用して文字起こし
+                                response = client.audio.transcriptions.create(
+                                    model="whisper-1",
+                                    file=audio_file,
+                                    language="ja",
+                                    response_format="verbose_json"
+                                )
+                                
+                                # レスポンスデータを取得
+                                response_data = get_response_data(response)
+                                
+                                # 結果があれば保存
+                                if response_data['segments']:
+                                    # 開始時間を合計時間に加算したタイムスタンプを生成
+                                    timestamp = format_timestamp(self.total_duration + start_time)
+                                    
+                                    # 話者情報を含むテキストを生成
+                                    text = f"【話者 {speaker}】 " + " ".join([segment['text'].strip() for segment in response_data['segments']])
+                                    
+                                    if text.strip():
+                                        segments.append(f"{timestamp} {text}")
+                                
+                        except Exception as e:
+                            print(f"セグメント処理中にエラーが発生しました: {str(e)}")
+                        
+                        finally:
+                            # 一時ファイルを削除
+                            if os.path.exists(segment_path):
+                                os.remove(segment_path)
+                    
+                    # 結果を時系列順に並べて出力
+                    if segments:
+                        with open(self.output_file, 'a', encoding='utf-8') as f:
+                            f.write("\n".join(segments) + "\n")
+                        
+                        # コンソールに進捗表示
+                        segment_duration = end_time - start_time
+                        self.total_duration += segment_duration
+                        print(f"\n新しい文字起こし結果を追加しました（合計: {self.total_duration:.1f}秒）")
+                    
+                except Exception as e:
+                    print(f"話者判定中にエラーが発生しました: {str(e)}")
+                    # 話者判定に失敗した場合は通常の文字起こしを実行
+                    result, duration = transcribe_realtime_chunk(audio_data, self.sample_rate)
+                    if result:
+                        with open(self.output_file, 'a', encoding='utf-8') as f:
+                            f.write(f"{result}\n")
+                        self.total_duration += duration
+                        print(f"\n新しい文字起こし結果を追加しました（合計: {self.total_duration:.1f}秒）")
                 
-                # コンソールに進捗表示
-                print(f"\n新しい文字起こし結果を追加しました（合計: {self.total_duration:.1f}秒）")
+                finally:
+                    # 一時ファイルを削除
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+            else:
+                # 話者判定パイプラインがない場合は通常の文字起こしを実行
+                result, duration = transcribe_realtime_chunk(audio_data, self.sample_rate)
+                if result:
+                    with open(self.output_file, 'a', encoding='utf-8') as f:
+                        f.write(f"{result}\n")
+                    self.total_duration += duration
+                    print(f"\n新しい文字起こし結果を追加しました（合計: {self.total_duration:.1f}秒）")
                 
         except Exception as e:
             print(f"バッファ処理中にエラーが発生しました: {str(e)}")
@@ -426,7 +547,7 @@ class RealtimeTranscriber:
         # 残りのバッファを処理
         if self.audio_buffer:
             print("\n残りの音声を処理中...")
-            self._transcribe_buffer()
+            self._diarize_and_transcribe()
         
         # 処理スレッドが存在する場合は終了を待機
         if self.thread and self.thread.is_alive():
