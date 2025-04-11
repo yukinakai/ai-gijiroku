@@ -64,6 +64,36 @@ class RecordingWorkflow:
         
         return filename
 
+    def run(self, filename: Optional[str] = None, sample_rate: int = 48000,
+            skip_transcribe: bool = False) -> bool:
+        """
+        録音から文字起こしまでのワークフローを実行（新しいインターフェース）
+        
+        Parameters:
+        - filename: 保存するファイル名（オプション）
+        - sample_rate: サンプリングレート
+        - skip_transcribe: 文字起こしをスキップするかどうか
+        
+        Returns:
+        - bool: ワークフローが正常に完了したかどうか
+        """
+        return self.execute(filename, sample_rate, skip_transcribe, realtime_transcribe=False)
+    
+    def run_with_realtime_transcription(self, filename: Optional[str] = None, sample_rate: int = 48000,
+                                       skip_transcribe: bool = False) -> bool:
+        """
+        リアルタイム文字起こし付きのワークフローを実行
+        
+        Parameters:
+        - filename: 保存するファイル名（オプション）
+        - sample_rate: サンプリングレート
+        - skip_transcribe: 文字起こし後の処理をスキップするかどうか
+        
+        Returns:
+        - bool: ワークフローが正常に完了したかどうか
+        """
+        return self.execute(filename, sample_rate, skip_transcribe, realtime_transcribe=True)
+
     def execute(self, filename: Optional[str] = None, sample_rate: int = 48000,
                 skip_transcribe: bool = False, realtime_transcribe: bool = False) -> bool:
         """

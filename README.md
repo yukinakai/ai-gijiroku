@@ -8,11 +8,13 @@
 - **高精度な文字起こし**: OpenAI Whisper API を使用
 - **時間軸付き出力**: すべての発言に対するタイムスタンプ付き
 - **リアルタイム文字起こし**: 録音しながらリアルタイムに文字起こしが可能
+- **話者判定機能**: 音声内の話者を区別して文字起こしが可能
 
 ## システム要件
 
 - Python 3.9 以上
 - OpenAI API キー
+- Hugging Face アクセストークン (話者判定機能を使用する場合)
 - macOS 環境 (BlackHole によるオーディオルーティング)
 - 必要な Python パッケージ (requirements.txt に記載)
 
@@ -31,11 +33,18 @@ pip install -r requirements.txt
 
 ### 3. 環境変数の設定
 
-`.env.example`をコピーして`.env`を作成し、OpenAI API キーを設定します：
+`.env.example`をコピーして`.env`を作成し、必要な API キーを設定します：
 
 ```
 OPENAI_API_KEY=your_api_key_here
+HUGGINGFACE_TOKEN=your_huggingface_token_here  # 話者判定機能を使用する場合に必要
 ```
+
+Hugging Face トークンの取得方法:
+
+1. [Hugging Face](https://huggingface.co/) にアカウント登録
+2. Settings > Access Tokens から新しいトークンを作成
+3. `.env` ファイルの `HUGGINGFACE_TOKEN` に設定
 
 ## 使用方法
 
@@ -77,13 +86,15 @@ python -m src.main record --realtime
 
 リアルタイム文字起こし使用時：
 
-1. 録音と同時に数秒ごとに文字起こしが行われます
+1. 録音と同時に話者判定が行われ、話者が切り替わるタイミングで文字起こしされます
 2. 文字起こし結果は録音中、`src/transcripts/realtime.txt`に随時保存されます
 3. 録音終了後、通常の命名規則（YYYYMMDD\_[名前].txt）に従ったファイル名に自動的にリネームされます
+4. 文字起こし結果には話者情報（【話者 SPEAKER_XX】形式）が含まれます
 
 注意事項：
 
 - リアルタイム文字起こしは通常の文字起こしより精度が若干低い場合があります
+- 話者判定機能を使用するには、Hugging Face のアクセストークンが必要です
 - 録音中は処理負荷が高くなるため、十分なシステムリソースを確保してください
 - リアルタイム文字起こし使用時は、録音終了後の自動文字起こしは実行されません
 

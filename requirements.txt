@@ -6,3 +6,4 @@ sounddevice
 soundfile
 numpy
 pydub
+pyannote.audio>=3.3.0
