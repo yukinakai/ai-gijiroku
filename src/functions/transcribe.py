@@ -33,9 +33,10 @@ try:
         use_auth_token=os.getenv("HUGGINGFACE_TOKEN")
     )
 except Exception as e:
+    import traceback
     print(f"警告: pyannote.audioの初期化に失敗しました: {str(e)}")
-    print("話者判定機能なしで続行します。")
-    diarization_pipeline = None
+    print(f"詳細エラー: {traceback.format_exc()}")
+    raise ValueError(f"pyannote.audioの初期化に失敗しました: {str(e)}")
 
 # チャンクサイズを20MBに設定（バイト単位）
 CHUNK_SIZE = 20 * 1024 * 1024
