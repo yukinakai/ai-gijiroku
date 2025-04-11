@@ -420,6 +420,11 @@ class AudioRecorder:
             
             # NumPy配列を結合し、ファイルに保存
             data = np.concatenate(frames, axis=0)
+            
+            # 複数チャンネルがある場合は平均化（モノラル化）
+            if data.ndim > 1 and data.shape[1] > 1:
+                data = np.mean(data, axis=1)
+                
             sf.write(filepath, data, sample_rate)
             
             print(f"録音完了: {filepath}")
