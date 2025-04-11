@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import json
 from datetime import datetime
 from pydub import AudioSegment
+from pydub.silence import split_on_silence, detect_nonsilent
 import tempfile
 import numpy as np
 import soundfile as sf
@@ -372,13 +373,76 @@ def process_directory(input_dir="recordings", output_dir="src/transcripts"):
         except Exception as e:
             print(f"エラー発生 ({audio_file.name}): {str(e)}")
 
-def transcribe_realtime_chunk(audio_data, sample_rate=48000):
+def detect_silence(audio_data, sample_rate=48000, min_silence_len=500, silence_thresh=-40, keep_silence=300):
+    """
+    音声データから無音部分を検出し、有声部分のみを返す
+    
+    Args:
+        audio_data (numpy.ndarray): 音声データ（NumPy配列）
+        sample_rate (int): サンプリングレート
+        min_silence_len (int): 無音と判断する最小の長さ（ミリ秒）
+        silence_thresh (int): 無音と判断する音量のしきい値（dB）
+        keep_silence (int): 有声部分の前後に保持する無音の長さ（ミリ秒）
+        
+    Returns:
+        numpy.ndarray: 無音除去後の音声データ
+    """
+    try:
+        # 一時ファイルに保存
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+            temp_path = temp_file.name
+        
+        # NumPy配列をWAVファイルとして保存
+        sf.write(temp_path, audio_data, sample_rate)
+        
+        # AudioSegmentとして読み込み
+        audio = AudioSegment.from_file(temp_path)
+        
+        # 有声部分を検出
+        nonsilent_chunks = detect_nonsilent(
+            audio, 
+            min_silence_len=min_silence_len, 
+            silence_thresh=silence_thresh,
+            keep_silence=keep_silence
+        )
+        
+        # 有声部分がない場合は元の音声を返す
+        if not nonsilent_chunks:
+            return audio_data
+        
+        # 有声部分を結合
+        processed_audio = AudioSegment.empty()
+        for start, end in nonsilent_chunks:
+            processed_audio += audio[start:end]
+        
+        # 一時ファイルに保存
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as processed_file:
+            processed_path = processed_file.name
+        
+        processed_audio.export(processed_path, format="wav")
+        
+        # NumPy配列として読み込み
+        processed_data, _ = sf.read(processed_path)
+        
+        # 一時ファイルを削除
+        os.remove(temp_path)
+        os.remove(processed_path)
+        
+        return processed_data
+        
+    except Exception as e:
+        print(f"無音除去処理中にエラーが発生しました: {str(e)}")
+        # エラーが発生した場合は元の音声を返す
+        return audio_data
+
+def transcribe_realtime_chunk(audio_data, sample_rate=48000, remove_silence=True):
     """
     リアルタイムで録音された音声チャンクを文字起こしする
     
     Args:
         audio_data (numpy.ndarray): 音声データ（NumPy配列）
         sample_rate (int): サンプリングレート
+        remove_silence (bool): 無音除去を行うかどうか
     
     Returns:
         tuple: (文字起こしテキスト, 開始時間)
@@ -388,6 +452,10 @@ def transcribe_realtime_chunk(audio_data, sample_rate=48000):
         temp_path = temp_file.name
     
     try:
+        # 無音除去を行う場合
+        if remove_silence and len(audio_data) > 0:
+            audio_data = detect_silence(audio_data, sample_rate)
+        
         # NumPy配列をWAVファイルとして保存
         sf.write(temp_path, audio_data, sample_rate)
         
@@ -431,11 +499,12 @@ def transcribe_realtime_chunk(audio_data, sample_rate=48000):
 class RealtimeTranscriber:
     """リアルタイム文字起こしを管理するクラス"""
     
-    def __init__(self, output_file, chunk_duration=30.0):
+    def __init__(self, output_file, chunk_duration=30.0, remove_silence=True):
         """
         Parameters:
         - output_file: 文字起こし結果を保存するファイルパス
         - chunk_duration: 一度に処理する音声チャンクの長さ（秒）
+        - remove_silence: 無音除去を行うかどうか
         """
         self.output_file = output_file
         self.chunk_duration = chunk_duration
@@ -450,6 +519,7 @@ class RealtimeTranscriber:
         self.speaker_start_time = 0
         self.total_samples = 0
         self.sample_rate = 48000  # サンプリングレート
+        self.remove_silence = remove_silence  # 無音除去フラグ
         
         # 出力ファイルの準備
         output_dir = os.path.dirname(output_file)
@@ -465,6 +535,8 @@ class RealtimeTranscriber:
         # 新しいファイルを作成
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write("# リアルタイム文字起こし\n\n")
+            if self.remove_silence:
+                f.write("注: 無音除去機能が有効です\n\n")
     
     def add_audio(self, audio_chunk):
         """
@@ -510,6 +582,10 @@ class RealtimeTranscriber:
                 # 話者判定用のバッファも結合
                 speaker_audio = np.concatenate(self.speaker_buffer, axis=0)
                 self.speaker_buffer = []
+                
+                # 無音除去を行う場合
+                if self.remove_silence and len(speaker_audio) > 0:
+                    speaker_audio = detect_silence(speaker_audio, self.sample_rate)
             
             # 一時ファイルに保存して話者判定を実行
             if diarization_pipeline is not None:
@@ -595,7 +671,7 @@ class RealtimeTranscriber:
                 except Exception as e:
                     print(f"話者判定中にエラーが発生しました: {str(e)}")
                     # 話者判定に失敗した場合は通常の文字起こしを実行
-                    result, duration = transcribe_realtime_chunk(audio_data, self.sample_rate)
+                    result, duration = transcribe_realtime_chunk(audio_data, self.sample_rate, self.remove_silence)
                     if result:
                         with open(self.output_file, 'a', encoding='utf-8') as f:
                             f.write(f"{result}\n")
@@ -608,7 +684,7 @@ class RealtimeTranscriber:
                         os.remove(temp_path)
             else:
                 # 話者判定パイプラインがない場合は通常の文字起こしを実行
-                result, duration = transcribe_realtime_chunk(audio_data, self.sample_rate)
+                result, duration = transcribe_realtime_chunk(audio_data, self.sample_rate, self.remove_silence)
                 if result:
                     with open(self.output_file, 'a', encoding='utf-8') as f:
                         f.write(f"{result}\n")
@@ -660,6 +736,7 @@ if __name__ == "__main__":
     parser.add_argument("-f", "--file", help="文字起こしする音声ファイルのパス")
     parser.add_argument("-d", "--directory", help="文字起こしする音声ファイルのディレクトリ")
     parser.add_argument("-o", "--output", default="src/transcripts", help="出力先ディレクトリ（デフォルト: transcripts）")
+    parser.add_argument("--no-silence-removal", action="store_true", help="無音除去を無効にする")
     
     args = parser.parse_args()
 
